@@ -6,7 +6,11 @@
     "start": "next start",
     "lint": "eslint .",
     "generate-wallets": "node --experimental-transform-types --no-warnings generate-wallets.mts",
-    "agent": "node --experimental-transform-types --no-warnings --env-file=.env.local agent.mts"
+    "agent": "node --experimental-transform-types --no-warnings --env-file=.env.local agent.mts",
+    "chain-observer": "node --experimental-transform-types --no-warnings --env-file=.env.local chain-observer.mts",
+    "chain-observer:once": "node --experimental-transform-types --no-warnings --env-file=.env.local chain-observer.mts --once",
+    "test:engine": "node --experimental-transform-types --no-warnings lib/ballast/infer-state-v1.test.mts",
+    "infer:replay": "node --experimental-transform-types --no-warnings --env-file=.env.local infer-replay.mts"
   },
   "dependencies": {
     "@circle-fin/x402-batching": "^2.0.4",

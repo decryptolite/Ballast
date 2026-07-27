@@ -52,7 +52,12 @@ function buildPaymentRequirements(price: string) {
     asset: ARC_TESTNET_USDC,
     amount: amount.toString(),
     payTo: sellerAddress,
-    maxTimeoutSeconds: 345600,
+    // Circle's Gateway /v1/x402/supported publishes minValiditySeconds=604800
+    // (7 days) for GatewayWalletBatched on Arc Testnet — any shorter window
+    // is rejected by verify() with invalidReason "authorization_validity_too_short"
+    // (see DECISIONS.md #010). 691200 = 8 days, a deliberate ~1-day margin
+    // above the published minimum, not an arbitrary round number.
+    maxTimeoutSeconds: 691200,
     extra: {
       name: "GatewayWalletBatched",
       version: "1",
@@ -114,6 +119,9 @@ export function withGateway(
       );
 
       if (!verifyResult.isValid) {
+        console.error(
+          `[x402] Verification failed for ${endpoint}: ${verifyResult.invalidReason}`,
+        );
         return NextResponse.json(
           {
             error: "Payment verification failed",
@@ -158,6 +166,47 @@ export function withGateway(
 
       if (error) {
         console.error("Failed to record payment event:", error.message);
+      }
+
+      // Ballast evidence log — additive, non-blocking. This is the VERIFIED
+      // observation point (DECISIONS.md #008/#009): Circle's facilitator has
+      // accepted the authorization and the resource is about to be served.
+      // A failure here must never break or delay the payment response, but
+      // must never be swallowed silently either — hence its own try/catch
+      // and a loud console.error, independent of the payment_events insert
+      // above.
+      try {
+        const authPayload = paymentPayload.payload as
+          | { authorization?: { nonce?: string } }
+          | undefined;
+        const paymentIdForEvidence = authPayload?.authorization?.nonce ?? null;
+        const buyerRefForEvidence =
+          settleResult.payer ?? verifyResult.payer ?? null;
+
+        const { error: evidenceError } = await supabase
+          .from("verification_events")
+          .insert({
+            payment_id: paymentIdForEvidence,
+            amount: Number(amountUsdc),
+            endpoint,
+            buyer_ref: buyerRefForEvidence,
+            authorization_ref: settleResult.transaction ?? null,
+            raw: { paymentPayload, requirements, verifyResult, settleResult },
+          });
+
+        if (evidenceError) {
+          console.error(
+            `[ballast] Failed to record verification_events for ${endpoint}:`,
+            evidenceError.message,
+          );
+        }
+      } catch (evidenceException) {
+        console.error(
+          `[ballast] verification_events insert threw for ${endpoint}:`,
+          evidenceException instanceof Error
+            ? evidenceException.message
+            : String(evidenceException),
+        );
       }
 
       console.log(
