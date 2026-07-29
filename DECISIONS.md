@@ -1159,3 +1159,10 @@ real data) and type safety. MEDIUM on the browser download interaction
 (Blob/anchor mechanics — standard, but not exercised in a browser this
 session; same tooling constraint as prior UI tasks).
 **Status:** Accepted (calls 1-5 awaiting ratification).
+
+**Ratification addendum (user ruling, recorded in this entry per explicit
+instruction):** all five design calls ratified as correct. Phase 1 is
+declared complete. The one remaining MEDIUM item — the real browser
+download test — is deferred to the batched browser-verification pass the
+user will run before Phase 3 (Evidence Assistant), alongside the other
+deferred browser checks (#030/#031's insert path among them).

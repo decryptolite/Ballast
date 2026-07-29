@@ -529,9 +529,11 @@ configured or verified for Ballast specifically. **Open item.**
 
 **Confidence: HIGH — directly transcribed from the user's final pruned roadmap, unmodified.**
 
-**Phase 1 (Build Now — in progress):**
-Engine (done), Evidence (done), Ledger (done), Operational State (done),
-Row-expansion interaction (next), Timeline Replay UI, Audit Export.
+**Phase 1 (Build Now — COMPLETE, user-declared with #032's ratification):**
+Engine, Evidence, Ledger, Operational State, Row-expansion interaction,
+Timeline Replay UI, Audit Export, BREAK remediation (promoted per #030) —
+all built. Remaining Phase 1 debt: the batched browser-verification pass
+(Audit Export download, remediation insert path) before Phase 3.
 
 **Phase 2:** Design pass — typography, spacing, hierarchy, motion (paused
 per explicit user instruction pending platform switch).
@@ -597,12 +599,14 @@ type-separation); Evidence Lifecycle/Retention Policy; Historical Diff
 - [x] BREAK is never produced from absence of coverage alone.
 - [x] The Operational State component renders correctly independent of the
   ledger's own data-loading state.
-- [ ] Row-expansion four-depth interaction — not yet built.
-- [ ] Timeline Replay UI — not yet built (engine capability proven, UI
-  pending).
-- [ ] Audit Export — not yet built.
-- [ ] Evidence Assistant — not yet built.
-- [ ] BREAK remediation workflow — not yet built, not yet classified.
+- [x] Row-expansion four-depth interaction — built (#023), browser-confirmed
+  (#029).
+- [x] Timeline Replay UI — built (#025/#026), verified on real evidence.
+- [x] Audit Export — built (#032, all calls ratified); real browser download
+  test deferred to the batched browser-verification pass before Phase 3.
+- [ ] Evidence Assistant — not yet built (Phase 3, next).
+- [x] BREAK remediation workflow — built (#030/#031); happy-path insert
+  deferred to final testing (no genuine attention case exists — see #031).
 
 ---
 
