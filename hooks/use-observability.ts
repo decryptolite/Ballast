@@ -54,6 +54,18 @@ export interface ObservedPayment {
 
 export interface ObservabilityData {
   payments: ObservedPayment[];
+  /** All verification_events rows exactly as already fetched and used as
+   * siblingEvents for the inference calls above (ascending observed_at).
+   * Exposed for the ledger row's Timeline Replay, which must re-run
+   * inferStateV1 with the sibling set truncated to the replay moment.
+   * Return-shape addition only — queries byte-identical (see DECISIONS.md
+   * #023/#025). */
+  events: (VerificationEventInput & { id: string })[];
+  /** All chain_observations rows exactly as already fetched for the
+   * inference calls above (ascending observed_at). Exposed for the ledger
+   * row's Audit depth — this is a return-shape addition only; the Supabase
+   * queries themselves are byte-identical to before. */
+  observations: ChainObservationInput[];
   /** Current floating value: the most recent chain_observations reading of
    * pendingBatch, or null if no observation has ever carried one. */
   currentFloating: number | null;
@@ -86,6 +98,12 @@ function readPendingBatchValue(obs: ChainObservationInput): number | null {
 
 export function useObservability(): ObservabilityData {
   const [payments, setPayments] = useState<ObservedPayment[]>([]);
+  const [events, setEvents] = useState<(VerificationEventInput & { id: string })[]>(
+    [],
+  );
+  const [observations, setObservations] = useState<ChainObservationInput[]>(
+    [],
+  );
   const [currentFloating, setCurrentFloating] = useState<number | null>(null);
   const [currentFloatingAsOf, setCurrentFloatingAsOf] = useState<
     string | null
@@ -142,6 +160,8 @@ export function useObservability(): ObservabilityData {
         : null;
 
     setPayments(computed);
+    setEvents(allEvents);
+    setObservations(allObservations);
     setCurrentFloating(
       latestObservation ? readPendingBatchValue(latestObservation) : null,
     );
@@ -159,6 +179,8 @@ export function useObservability(): ObservabilityData {
 
   return {
     payments,
+    events,
+    observations,
     currentFloating,
     currentFloatingAsOf,
     loading,

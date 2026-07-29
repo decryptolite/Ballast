@@ -147,37 +147,3 @@ proposing any code change:
 
 Prefer spending 10 extra minutes investigating over creating hours of
 rework. Optimize for correctness and maintainability, not speed of response.
-EOFcat >> CLAUDE.md << 'EOF'
-
----
-
-## Confidence Policy
-
-Every recommendation — from Claude Code or from chat — must carry an
-explicit confidence level:
-
-- **HIGH** — verified directly from repository code, verified from official
-  documentation, or tested successfully.
-- **MEDIUM** — supported by documentation but not yet tested.
-- **LOW** — reasoned inference. Requires validation before implementation.
-
-Never present a LOW-confidence conclusion as a fact. When confidence is LOW,
-state explicitly what evidence is missing and how to obtain it.
-
-This applies to claims about what happened (events, test results, screenshots)
-as much as to technical recommendations. If something wasn't directly
-observed or verified, say so — don't narrate it as if it was.
-
-## Cost of Change Principle
-
-Every incorrect recommendation creates unnecessary engineering work. Before
-proposing any code change:
-
-1. Determine whether a change is actually necessary.
-2. Determine whether the problem already has an implementation.
-3. Determine whether the change introduces new complexity.
-4. Compare at least two possible approaches.
-5. Recommend the simplest solution that satisfies the requirements.
-
-Prefer spending 10 extra minutes investigating over creating hours of
-rework. Optimize for correctness and maintainability, not speed of response.

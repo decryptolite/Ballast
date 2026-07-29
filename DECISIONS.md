@@ -601,3 +601,341 @@ not a defect in the page or the engine. A mixed view returns automatically
 the next time new traffic is generated (`npm run agent` + `npm run
 chain-observer`), with no code change required.
 **Status:** Accepted.
+
+---
+
+### Decision #021 — Operational State component: independence, the
+### stale-coverage threshold, and why the click target is inline, not scroll-only
+**Decision:** Built `hooks/use-operational-state.ts` +
+`components/dashboard/operational-state.tsx`, mounted at the top of
+`/dashboard/observe`. Does not import or read anything from
+`useObservability`'s state — its own Supabase client instance, its own
+query against `verification_events`/`chain_observations`, its own 10s
+poll timer. Does not modify `lib/ballast/infer-state-v1.ts`,
+`chain-observer.mts`, or `hooks/use-observability.ts` — imports
+`inferStateV1` and the already-exported `BREAK_WINDOW_MS` read-only.
+
+**Deliberately duplicated, not shared, query code.** ~15 lines of the
+Supabase query are identical to `useObservability`'s. Not factored into a
+shared helper on purpose: the requirement is that this component "must be
+able to be correct even if the ledger UI hasn't rendered or has stale
+data," and a shared fetch function is exactly the kind of coupling that
+would later get "optimized" (a shared cache, a single fetch hoisted to a
+parent) in a way that silently reintroduces the dependency this component
+exists to not have. Duplication here is the feature, not an oversight.
+
+**The stale-coverage threshold — a real judgment call, not in the brief.**
+The engine attaches the same signal kind, `insufficient_observation_coverage`,
+to two different situations: a payment verified one second ago (completely
+normal — nothing has had time to observe it yet) and a payment verified 40
+minutes ago with still nothing (the observer is probably not running, which
+*is* actionable). The signal kind alone doesn't distinguish them; only real
+elapsed wall-clock time does. Chose to flag the second case as "requires
+attention" only once elapsed time since verification reaches
+`BREAK_WINDOW_MS` (30 min, imported from the engine rather than
+re-declared, so the two thresholds can never drift apart) — the same bar
+the engine itself uses for BREAK. Reasoning: a payment with genuinely no
+observation coverage for that long is at least as concerning as a BREAK
+(it means our own monitoring has a gap), so treating it with equal urgency
+is correct, not arbitrary. Below that threshold, it is silently ignored —
+counting every freshly-verified payment as "needs attention" would make the
+indicator noisy on any live system and defeat its purpose as a calm,
+trustworthy signal.
+
+**Reading the clock here, while the engine never does — a deliberate,
+bounded exception, not a compromise to #004.** `inferStateV1` stays pure
+and clock-free by design, because its job is replayable historical
+inference (#004, #012). This component's job is a different question —
+"is our monitoring falling behind, right now" — which is inherently a live
+question a pure function over historical evidence cannot answer on its
+own. `Date.now()` is used only in this hook, only to measure elapsed time
+for the attention threshold above; it never flows into `inferStateV1`'s
+`asOf` or into any stored/derived state. Recorded explicitly so this
+doesn't read as an accidental erosion of the engine's purity guarantee —
+it's a separate concern in a separate file.
+
+**Click behavior — inline reveal, with scroll-to as a best-effort bonus,
+not the primary mechanism.** The brief allowed "a simple scroll-to or
+filter." Chose an inline expandable list over pure scroll-to because the
+ledger below only renders its most recent 40 payments
+(`DISPLAY_LIMIT` in `hooks/use-observability.ts`) — a flagged payment
+found by this component's full, unbounded query is not guaranteed to be
+among them. Depending solely on `scrollIntoView`/anchor-jump to a DOM node
+that might not exist would silently fail exactly when this component's
+independence requirement matters most. The inline list is therefore the
+primary, always-correct interaction; each entry additionally links to
+`#payment-{id}` (an `id` attribute added to each ledger row in
+`observe/page.tsx` — the only change to that file, purely presentational,
+not a query-logic change) as a convenience when the row happens to be on
+screen.
+
+**Verification on real data (no fabricated states):**
+- **Calm state, true current data:** 308 real payments evaluated, 0
+  floating, 0 flagged → `level=calm`, `"All observations reconciled"`.
+  Consistent with #017/#018: everything from the last live run has fully
+  resolved.
+- **Attention state:** no payment currently meets the bar for real (all
+  evidence is old enough to have either fully reconciled or never
+  existed), so — following the same honest-replay method already used and
+  recorded in #017 for the identical problem — reconstructed it from real
+  evidence at a real historical moment: evidence truncated to what existed
+  as of `2026-07-25T21:22:10Z`, evaluated with a simulated "now" 35 minutes
+  later (past `BREAK_WINDOW_MS`). Result: `level=attention`,
+  `"6 payment(s) require attention"`, all six correctly reason=
+  `stale_coverage` with the engine's own `insufficient_observation_coverage`
+  signal attached — no BREAK exists in this dataset (consistent with
+  #012/#014: no payment has ever actually failed to reconcile), so the
+  attention state observed here is entirely the coverage-gap path, not a
+  fabricated BREAK.
+- Not verified live in a browser, for the same reason as #017: no browser
+  automation is reachable in this sandbox (`chromium-cli` absent,
+  `cdn.playwright.dev` DNS-unreachable). `tsc --noEmit` across the project
+  reports zero errors touching either new file or the modified page.
+
+**Confidence:** HIGH for the query/classification logic and both states
+above — verified directly against real repository data per the method
+above, not assumed. MEDIUM for the click/expand interaction and the
+`#payment-{id}` anchor behavior specifically — implemented and
+type-checked, but not exercised in an actual browser (same unavailable-
+tooling constraint as #017), so its DOM behavior is reasoned, not observed.
+**Status:** Accepted.
+
+---
+
+### Decision #022 — Documentation set synced into the repo; CLAUDE.md
+### corruption repaired; reconciliation of the reconstructed DECISIONS copy
+**Decision:** Wrote the four governance/design documents the user authored
+in chat into the repo root verbatim (`DESIGN_PHILOSOPHY.md`,
+`PARKING_LOT.md`, `BALLAST_MASTER_SPEC.md`, `BALLAST_DESIGN_SYSTEM.md`,
+with transfer mojibake restored to proper punctuation) — they were stated
+to be in the repo but only `CLAUDE.md`/`DECISIONS.md` existed on disk.
+Also repaired `CLAUDE.md`: line 150 contained a literal
+`EOFcat >> CLAUDE.md << 'EOF'` heredoc artifact followed by a duplicated
+Confidence Policy/Cost of Change section (a malformed append performed
+outside any Claude Code session); removed the artifact and duplicate,
+content otherwise unchanged.
+**Reconciliation note:** the reconstructed DECISIONS.md attachment
+accompanying this task correctly deferred to the on-disk file as
+authoritative and acknowledged the earlier fabricated #018–#020 entries as
+discarded. Verified via `git diff` that the on-disk log was untouched by
+anything external: its only change since the last commit is #021. On-disk
+entry sequence remains #001–#013, #016, #017, #021 (numbering gaps are
+historical fact, not errors — #014/#015/#018–#020 were never legitimately
+recorded here).
+**Status:** Accepted.
+
+---
+
+### Decision #023 — Row-expansion depth interaction: first styled surface,
+### and the gaps deliberately flagged rather than silently decided
+**Decision:** Built `components/dashboard/ledger-row.tsx` (LedgerRow,
+LedgerHeader, LedgerRowStyles) and replaced the plain table in
+`app/dashboard/observe/page.tsx` with it. Four-depth expansion-in-place
+per BALLAST_DESIGN_SYSTEM.md §10: Collapsed/Priority (four fixed-position
+columns, grid template shared with the header so positions never shift),
+Understanding (evidence signal lines, +24px nesting), Audit (raw evidence
++ engine version + replay placeholder, a further +24px). Design tokens from
+§3/§4/§5/§14 applied scoped to this component only — Operational State and
+page chrome untouched, per task constraint. `#payment-{id}` anchors
+preserved on the row root so #021's attention-list links keep working.
+Engine, observer, and Supabase queries untouched.
+
+**Interpretation of "do not touch any query logic," stated openly:**
+`hooks/use-observability.ts` now *returns* the chain_observations it was
+already fetching (three small edits: interface field, state var, return
+field). The Supabase queries are byte-identical — this is a return-shape
+addition, not a query change. Without it the Audit depth would have had no
+raw observation JSON to show, failing the milestone's explicit requirement.
+Judged within the constraint's intent; flagged here so it isn't discovered
+as a silent liberty.
+
+**Audit depth scoping — never broader than the conclusion:** the raw JSON
+shown is (a) the verification_event row as fetched and (b) only the
+chain_observations rows whose ids appear in this inference's own
+`signals[].observation_id` — the same discipline the Evidence Assistant
+spec mandates for retrieval ("identical to, not merely related to, the
+engine's evidence input"). When no signals reference an observation, Audit
+says so plainly instead of dumping unrelated rows.
+**Known limitation (flagged, needs a user call):** `verification_events.raw`
+(the full captured payload) is not fetched by the existing query, so the
+event JSON shown is the fetched row, not the complete raw capture. Fetching
+it would mean widening the select — a genuine query change, deliberately
+not made under this task's constraint. Decide separately whether Audit
+should include it.
+
+**Gaps the design system left open — flagged, not silently invented:**
+1. **VERIFIED has no color token** (§3 defines only BREAK/FLOATING/
+   RECONCILED). Rendered in `--ink-secondary` with the same structural
+   badge treatment: VERIFIED is the neutral baseline fact and the
+   philosophy reserves color for states communicating beyond baseline.
+   MEDIUM confidence — awaiting design confirmation.
+2. **Collapsed-vs-Priority:** task instruction and §10 both say identical
+   for now (and the task's "four columns incl. confidence in Collapsed"
+   overrides MASTER_SPEC §7's "Priority adds confidence" — a real conflict
+   between the two spec documents, resolved by the explicit instruction,
+   recorded rather than silently picked). Interaction therefore has three
+   effective visual positions (priority ↔ understanding ↔ audit) until the
+   distinction is finalized.
+3. **Timestamp column:** §10's collapsed anatomy has no timestamp column,
+   so "Verified at" moved from the old table into the Understanding depth
+   (caption line) — information preserved, not dropped.
+4. **IBM Plex not bundled:** referenced via CSS font-family stacks with
+   system fallbacks. Bundling requires either a network font fetch at build
+   time (unreliable in this sandbox — see #017's DNS constraint) or
+   vendored font files (an asset-licensing/size decision not this task's
+   to make). Tokens are in place; swapping in real Plex files later is a
+   no-code-change upgrade.
+5. **Motion:** §8's 200ms ease-out implemented as opacity-only unfold
+   (+ `prefers-reduced-motion` respected, instant focus ring, 100ms hover
+   wash). Height animation deliberately omitted — it requires measured-
+   height machinery, and §8 itself scopes expansion motion to
+   "height/opacity only"; opacity alone satisfies "motion because
+   information changed" without the complexity. BREAK rows get no
+   transition at all, per §8's abruptness rule.
+
+**Verification:** `tsc --noEmit` clean across the project (exit 0, zero
+errors in touched files). Browser verification unavailable again —
+`chromium-cli` absent, `cdn.playwright.dev` unresolvable (same as
+#017/#021) — stated per instruction rather than fabricated. Data-path risk
+of this change is low: the row renders the same `{event, inference}`
+objects the previous table rendered, plus already-fetched observations.
+**Confidence:** HIGH that the depth logic, badge treatment, token values,
+and audit-scoping match the written spec (verified against the documents
+and the compiler). MEDIUM on actual rendered appearance and the
+click/keyboard interaction feel — implemented to spec, type-checked, not
+yet seen in a browser by me; the user's own browser check is the
+verification path, same as prior UI tasks.
+**Status:** Accepted.
+
+---
+
+### Decision #024 — User rulings on the four items flagged in #023
+**Decision (all four ruled by the user, verbatim intent):**
+1. **VERIFIED badge color = `--ink-secondary`:** confirmed. Kept as built.
+2. **`verification_events.raw` in Audit:** approved in principle, but as a
+   separate follow-up task — the query is NOT to be widened yet. Audit
+   continues to show the event row as fetched until that task runs.
+3. **Collapsed/Priority visually identical:** confirmed as built.
+   `BALLAST_MASTER_SPEC.md` §7's "Priority adds confidence score" line was
+   corrected to state the two depths are currently identical with any
+   distinction deferred — a documentation correction to match the
+   implementation, explicitly not a new design decision.
+4. **Audit-scoping discipline** (only signal-referenced observations, never
+   broader): confirmed correct.
+**Status:** Accepted.
+
+---
+
+### Decision #025 — Timeline Replay UI: discrete ticks, truncated-evidence
+### replay, replay lifecycle, and a tick bound the spec didn't anticipate
+**Decision:** Replaced the Audit-depth placeholder in
+`components/dashboard/ledger-row.tsx` with the real Timeline Replay
+control. No engine change — `inferStateV1` is imported and called, never
+modified. `hooks/use-observability.ts` now also exposes the fetched
+verification_events (`events`) — the same return-shape-only pattern
+accepted in #023 (queries byte-identical); replay needs sibling events
+truncated to the replay moment for exact-sum attribution to reproduce.
+
+**Replay semantics — identical to every recorded verification method:**
+selecting a tick re-runs the engine with (a) observations truncated to
+`observed_at <= tick`, (b) sibling events truncated the same way, and
+(c) `asOf = tick`. This matches the engine's actual contract (`asOf` gates
+the time-window logic; the evidence lists supply "what was known then") and
+is byte-for-byte the method used in #017/#021's historical verifications.
+The result feeds a single `displayInference` variable that the existing
+header badge / confidence / signal-lines / audit-JSON rendering already
+reads — replay reuses the live render path, nothing duplicated.
+
+**Discrete ticks (§7):** one tick per real recorded evidence point — the
+payment's verification event, then chain observations at/after it. Even
+spacing, deliberately not time-proportional: proportional spacing would
+visually suggest a continuum between evidence points, the exact implication
+§7 prohibits. Overflow scrolls in its own container.
+
+**Tick bound — a genuine scale gap in the spec, decided and flagged:** §7
+was written when observations numbered ~22. Real data now holds 500+ global
+observations, so an unbounded tick set for one early payment rendered 528
+ticks — 525 of them yielding an identical terminal state after the
+payment's lifecycle had concluded: zero information, unusable density,
+"guilty until proven innocent" by the philosophy's own test. Ticks
+therefore run from the verification event through the **last observation
+the live conclusion's signals reference** (the evidence that actually
+produced the outcome); payments whose conclusion references no observation
+keep every post-verification tick. Bounded by the live inference, not the
+replayed one, so the tick set stays stable while scrubbing. Verified on
+real data: the #012 tracked payment went 528 → 3 ticks while still
+replaying its complete lifecycle (VERIFIED@1 → FLOATING@0.95 →
+RECONCILED@0.75, live state matching the final tick); the 40 currently
+displayed payments get 33–36 ticks each (their real ~10-minute lifecycles
+at the observer's actual cadence). MEDIUM-confidence design call —
+review welcome; trivially removable if all ticks are preferred.
+
+**Replay lifecycle — historical state must never linger unexplained:**
+replay exists only while the Audit depth is open. Closing Audit or
+collapsing the row clears it. Reasoning: replay re-renders the row's badge
+in the ledger itself; a FLOATING badge left behind by a forgotten replay
+would corrupt the one surface whose scanning integrity the philosophy
+calls sacred. While active, an ink-tone banner (no new color — §3 reserves
+color for payment states) sits at the top of the unfolded content:
+"Historical replay — state shown as of <mono timestamp>, not live" with a
+"Return to live" ghost button; the control itself carries a monospace
+readout ("Viewing: <timestamp>" vs "Live — current evidence") and a Live
+chip. State swap per tick is instant — no transition, no interpolation
+(§8).
+
+**Note:** the task message's final requirement was truncated mid-sentence
+("...this must"); interpreted as completing the sentence's own subject —
+the replay-vs-live indicator must be unambiguous — which the banner +
+readout + auto-clear lifecycle implement in triplicate.
+
+**Verification:** headless replica of the exact component logic (same
+anon-key queries, same tick/truncation code) against real evidence reproduced
+the full lifecycle above; `tsc --noEmit` clean project-wide (exit 0).
+Browser rendering not verified — same sandbox constraint as #017/#021/#023,
+stated rather than fabricated.
+**Confidence:** HIGH on replay correctness, tick discreteness, and reuse of
+the live render path (verified against real data + compiler). MEDIUM on
+rendered appearance/interaction feel (no browser) and on the tick-bound
+design call (flagged above for review).
+**Status:** Accepted.
+
+---
+
+### Decision #026 — User rulings on the Timeline Replay flags (#025)
+**Decision (ruled by the user):**
+1. **Tick bound confirmed and approved** — the evidence-scoped reasoning
+   (ticks through the last observation the live conclusion's signals
+   reference) is correct; kept exactly as built.
+2. **`events` return-shape exposure from `use-observability.ts`:** approved
+   (same pattern as #023's observations; queries byte-identical).
+3. **The truncated task-message requirement:** the completed interpretation
+   (replay-vs-live indicator must be unambiguous) was confirmed correct as
+   built.
+No implementation changes accompany this entry — record of ruling only.
+**Status:** Accepted.
+
+---
+
+### Decision #027 — OPEN: rendering discrepancy between built code and a
+### viewed instance; deferred until full build is ready
+**Finding (investigated, not resolved — per instruction):** a viewed
+`/dashboard/observe` instance rendered the pre-milestone flat table
+despite the last three milestones being complete on disk. Investigation
+established with direct evidence: (a) the source imports and renders the
+new ledger-row component and the old table markup no longer exists in the
+source; (b) the local dev server (only instance on the machine, restarted
+after the edits) provably serves the new code — its served JS chunks
+contain "Timeline replay" and "blst-row-header" and do NOT contain the old
+table's strings, which also structurally rules out a swallowed runtime
+error (old markup cannot render from a bundle that does not contain it);
+(c) root-cause hypothesis: all milestone work was uncommitted at the time
+— the last pushed commit (3da8ae6) contains exactly the old flat table,
+so any instance built from the pushed repo (deployment, second clone,
+stale tab predating the restart) shows exactly the reported symptom. The
+commit accompanying this entry removes that divergence for the future;
+whether it was the actual instance viewed is unconfirmed (the viewed URL
+was not identified).
+**Status: OPEN — deferred, not resolved.** All testing/debugging paused
+until a full build is ready, per instruction. MUST be revisited and
+positively closed (identify the viewed instance, confirm it now renders
+the built UI) before any final testing, demo, or submission.

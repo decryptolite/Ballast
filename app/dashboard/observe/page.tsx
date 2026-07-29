@@ -26,6 +26,12 @@
 "use client";
 
 import { useObservability } from "@/hooks/use-observability";
+import { OperationalState } from "@/components/dashboard/operational-state";
+import {
+  LedgerHeader,
+  LedgerRow,
+  LedgerRowStyles,
+} from "@/components/dashboard/ledger-row";
 
 function formatUsdc(n: number | null): string {
   if (n === null) return "—";
@@ -40,6 +46,8 @@ function formatTime(iso: string | null): string {
 export default function ObservePage() {
   const {
     payments,
+    events,
+    observations,
     currentFloating,
     currentFloatingAsOf,
     loading,
@@ -56,6 +64,8 @@ export default function ObservePage() {
         Every value below is a real query against verification_events /
         chain_observations, run through inferStateV1 (v1). No mocked data.
       </p>
+
+      <OperationalState />
 
       <div
         style={{
@@ -85,42 +95,19 @@ export default function ObservePage() {
       ) : payments.length === 0 ? (
         <p>No verification_events found.</p>
       ) : (
-        <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 13 }}>
-          <thead>
-            <tr style={{ borderBottom: "2px solid #000", textAlign: "left" }}>
-              <th style={{ padding: "4px 8px" }}>Verified at</th>
-              <th style={{ padding: "4px 8px" }}>Endpoint</th>
-              <th style={{ padding: "4px 8px" }}>Amount</th>
-              <th style={{ padding: "4px 8px" }}>State</th>
-              <th style={{ padding: "4px 8px" }}>Confidence</th>
-              <th style={{ padding: "4px 8px" }}>Signals</th>
-            </tr>
-          </thead>
-          <tbody>
-            {payments.map(({ event, inference }) => (
-              <tr key={event.id} style={{ borderBottom: "1px solid #ddd" }}>
-                <td style={{ padding: "4px 8px", whiteSpace: "nowrap" }}>
-                  {formatTime(event.observed_at)}
-                </td>
-                <td style={{ padding: "4px 8px" }}>{event.endpoint}</td>
-                <td style={{ padding: "4px 8px" }}>{event.amount} USDC</td>
-                <td style={{ padding: "4px 8px", fontWeight: "bold" }}>
-                  {inference.state}
-                </td>
-                <td style={{ padding: "4px 8px" }}>{inference.confidence}</td>
-                <td style={{ padding: "4px 8px" }}>
-                  <ul style={{ margin: 0, paddingLeft: 16 }}>
-                    {inference.signals.map((s, i) => (
-                      <li key={i} style={{ marginBottom: 2 }}>
-                        <code>[{s.kind}]</code> {s.detail}
-                      </li>
-                    ))}
-                  </ul>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div>
+          <LedgerRowStyles />
+          <LedgerHeader />
+          {payments.map(({ event, inference }) => (
+            <LedgerRow
+              key={event.id}
+              event={event}
+              inference={inference}
+              observations={observations}
+              events={events}
+            />
+          ))}
+        </div>
       )}
 
       <p style={{ fontSize: 11, color: "#999", marginTop: 20 }}>
