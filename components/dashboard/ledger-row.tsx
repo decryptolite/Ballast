@@ -32,6 +32,7 @@ import {
 } from "@/lib/ballast/infer-state-v1";
 import type { FetchedVerificationEvent } from "@/hooks/use-observability";
 import { RemediationSection } from "@/components/dashboard/remediation-section";
+import { AuditExportButton } from "@/components/dashboard/audit-export-button";
 
 // --- Design tokens (BALLAST_DESIGN_SYSTEM.md §3/§4/§14), scoped here. ---
 // IBM Plex is referenced by CSS family name with fallbacks; the font files
@@ -661,6 +662,18 @@ export function LedgerRow({
                     ? `Viewing: ${formatTime(replayAsOf)}`
                     : "Live — current evidence"}
                 </div>
+              </div>
+
+              {/* Audit Export (#032): downloads the displayed conclusion
+                  with its complete evidentiary basis — a replayed view
+                  exports exactly what is on screen, as_of declared. */}
+              <div style={{ marginTop: 16 }}>
+                <AuditExportButton
+                  event={event}
+                  inference={displayInference}
+                  observations={observations}
+                  replayAsOf={replayAsOf}
+                />
               </div>
             </div>
           )}

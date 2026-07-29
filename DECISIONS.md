@@ -1102,3 +1102,60 @@ gap into the observation history.
 MEDIUM (validated + type-checked, never executed) until a genuine
 attention case exists.
 **Status:** Accepted.
+
+---
+
+### Decision #032 — Audit Export: a portable, self-describing audit
+### document per payment, exported from the Audit depth
+**Decision:** Built `lib/ballast/audit-export.ts` (pure, version-stamped
+builder — `export_version: "1"`, independent of the engine version so the
+document format can evolve without touching inference) and
+`components/dashboard/audit-export-button.tsx`, wired into the Audit depth
+of the ledger row. Clicking downloads a single JSON document in place — no
+route change, per the revelation principle. Engine, observer, queries
+untouched.
+
+**Document contents:** the verification_events row with full raw capture;
+the conclusion (state, confidence, engine_version, all signals); the
+chain_observations evidence with full raws, scoped by the same
+relevant-evidence bound as Timeline Replay (#025) — verification through
+the last signal-referenced observation; the remediation history with an
+honest status field (included / unavailable / error — never silently
+absent); a reproducibility statement; and an epistemic statement spelling
+out fact vs. inference (VERIFIED recorded fact; FLOATING derived from an
+offchain accumulator; RECONCILED capped below certainty per #008;
+remediation human-action, never engine input).
+
+**Design calls, flagged:**
+1. **Exports the DISPLAYED conclusion.** A live view exports
+   `view: {mode:"live"}`; a Timeline Replay view exports
+   `{mode:"historical_replay", as_of}` with evidence truncated to that
+   moment — Layer 4's "reconstruction at that moment" made literal. The
+   exported document always says which it is.
+2. **Sum-attribution siblings not embedded.** Bit-exact recomputation of a
+   `pending_batch_sum_attributed` signal needs the open batch's sibling
+   verification_events (other payments' records, potentially hundreds).
+   Embedding them would bloat every export; instead the document carries an
+   explicit `reproducibility.limitation` naming exactly what else is needed
+   and where it lives — present only when that signal is present (verified:
+   absent on the live RECONCILED export, present on the replayed FLOATING
+   one).
+3. **JSON download only; no preview dialog.** §6's "Audit export dialog" is
+   Phase 2 design work; the functional core is the document itself.
+4. **Button self-fetches remediation** (second small indexed read, only
+   while Audit is open) rather than lifting shared state through LedgerRow
+   — chose an extra cheap query over coupling two components' data flow.
+5. **Builder purity:** `generated_at` is an input, not a clock read —
+   identical inputs produce byte-identical documents.
+
+**Verification (real evidence, tracked payment 0x9e40d517…):** live export
+= RECONCILED @ 0.75, 2 evidence rows with raws, payment raw present,
+5.3 KB, deterministic (byte-identical on repeat); replayed export at the
+FLOATING tick = FLOATING @ 0.95, `historical_replay` view, evidence
+correctly truncated to as_of, limitation note present. `tsc --noEmit`
+clean project-wide.
+**Confidence:** HIGH on document content/scoping/determinism (verified on
+real data) and type safety. MEDIUM on the browser download interaction
+(Blob/anchor mechanics — standard, but not exercised in a browser this
+session; same tooling constraint as prior UI tasks).
+**Status:** Accepted (calls 1-5 awaiting ratification).
