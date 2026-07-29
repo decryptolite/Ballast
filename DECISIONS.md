@@ -1063,3 +1063,42 @@ applied — both stated rather than claimed.
 appearance and the end-to-end write path (unexercisable until migration is
 applied; server-side logic reasoned + type-checked only).
 **Status:** Accepted (design calls 1-5 above awaiting ratification).
+
+---
+
+### Decision #031 — remediation_events live; write-path guardrails verified
+### against the running server; insert path deliberately left unexercised
+**Table:** live in production Supabase with the exact intended schema and
+enforcement — verified by the user directly (columns match the migration,
+UPDATE/DELETE revoked from anon/authenticated/service_role with only the
+postgres table owner retaining them, RLS blocking anon/authenticated
+INSERT) and independently confirmed here via anon read (0 records).
+
+**Write-path guardrails exercised against the actual running dev server**
+(all four write nothing; row count confirmed 0 before and after):
+- no session cookie → 401 Unauthorized
+- invalid action → 400 "action must be one of: acknowledge, resolve"
+- resolve with blank note → 400 "resolve requires a non-empty note"
+- malformed verification_event_id → 400 "must be a UUID"
+(First two initially returned connection failures on the route's cold
+compile — Next dev compiles routes on demand; both passed on the warm
+retry. Not a defect.)
+
+**The 201 insert path remains unexercised, deliberately.** At verification
+time no payment qualified for attention: all 308 live payments evaluate
+RECONCILED (170 @ 0.75, 138 @ 0.6), zero BREAK, zero stale-coverage under
+the shared predicate. Writing an acknowledge/resolve record against a
+payment that does not require attention would fabricate a human-action
+record — the exact class of dishonest data this table must never contain.
+Per instruction, the absence is stated instead.
+**Honest route to full E2E coverage, when wanted:** generate real traffic
+with the chain observer OFF for >30 min. The resulting
+`insufficient_observation_coverage` past `BREAK_WINDOW_MS` is a *genuine*
+monitoring gap, not a simulation — those payments would truly require
+attention, and acknowledging one would be a truthful operational record.
+Not done unilaterally: it spends real testnet funds and writes a permanent
+gap into the observation history.
+**Confidence:** HIGH on everything verified above. The insert path stays
+MEDIUM (validated + type-checked, never executed) until a genuine
+attention case exists.
+**Status:** Accepted.
