@@ -249,7 +249,7 @@ pending a platform/model switch.
 | Audit Export | Build This Sprint | Formatting existing data; low net-new logic. |
 | Evidence Assistant ("Ask Ballast") | Build This Sprint | Build after engine/UI are visually stable. |
 | Natural Language Investigation | After Hackathon | Build only atop Assistant's retrieval layer. |
-| BREAK remediation workflow | Needs promotion — see Section 19 | Currently unclassified/underspecified; flagged repeatedly as the most important real gap. |
+| BREAK remediation workflow | Build Now — promoted, minimal model built (DECISIONS.md #030) | Human-action records, type-separated from evidence, never engine input. Migration pending application. |
 | Historical Diff | After Hackathon | Built on Timeline Replay's asOf, not standalone. |
 | Human Notes | After Hackathon | Requires type-separation from system evidence before build. |
 | Team Collaboration | Parking Lot | High complexity, low trust-impact relative to cost. |
@@ -477,15 +477,15 @@ milestone.**
   independently discovered and fixed.
 - Inference engine: never throws on missing/incomplete evidence; returns
   `insufficient_observation_coverage` rather than guessing.
-- **Gap, escalating per repeated prior flagging:** there is **no defined
-  BREAK remediation workflow.** Ballast can detect an unresolved BREAK; it
-  has no answer for what happens next — no ownership, escalation, or
-  resolution record. This has been flagged three separate times across
-  this build as the single most important missing capability before
-  Ballast qualifies as a true instrument rather than a demo. It is
-  currently unclassified in the roadmap (neither Build Now nor Parking
-  Lot). **This needs an explicit classification decision — see Open
-  Questions, Section 24.**
+- **BREAK remediation workflow: built (DECISIONS.md #030).** Ballast now
+  answers "then what happens": acknowledge and resolve-with-required-note
+  actions, recorded append-only in `remediation_events` (human-action
+  records, type-separated from system evidence, never read by the
+  inference engine), written only through the session-gated
+  `/api/ballast/remediation` route, with permanent history rendered inside
+  the flagged row. Ownership/assignment deliberately excluded until real
+  identity exists. Migration pending application; Operational State status
+  integration is a deferred follow-up.
 
 ---
 
@@ -567,13 +567,13 @@ type-separation); Evidence Lifecycle/Retention Policy; Historical Diff
 2. **Ask Ballast conversation logging:** should assistant Q&A be logged as
    immutable evidence itself, per Layer 4? Reasoned as likely yes, not
    formally locked.
-3. **BREAK remediation workflow classification:** this has been flagged
-   repeatedly as the most important real gap in the product (a regulator's
-   first question would be "then what happens"), yet it has never been
-   given a roadmap classification (Build Now / This Sprint / Parking Lot).
-   **This is the single most load-bearing open item in this entire
-   document and should be resolved before final submission if at all
-   possible.**
+3. **BREAK remediation workflow classification: RESOLVED (DECISIONS.md
+   #030).** Promoted to Build Now by user ruling; minimal model built —
+   append-only `remediation_events` (human-action records, type-separated
+   from system evidence, never read by the engine), session-gated write
+   route, row-level acknowledge/resolve UI. Remaining sub-items: migration
+   application, Operational State status integration (deferred follow-up),
+   and ratification of the design calls flagged in #030.
 4. **External API surface:** no versioned `/api/ballast/*` layer exists;
    unscoped as to whether it's needed before the hackathon deadline.
 5. **Evidence lifecycle/retention:** no decision yet on whether evidence is

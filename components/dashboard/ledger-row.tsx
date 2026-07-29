@@ -26,10 +26,12 @@
 import { useMemo, useState } from "react";
 import {
   inferStateV1,
+  BREAK_WINDOW_MS,
   type ChainObservationInput,
   type Inference,
 } from "@/lib/ballast/infer-state-v1";
 import type { FetchedVerificationEvent } from "@/hooks/use-observability";
+import { RemediationSection } from "@/components/dashboard/remediation-section";
 
 // --- Design tokens (BALLAST_DESIGN_SYSTEM.md §3/§4/§14), scoped here. ---
 // IBM Plex is referenced by CSS family name with fallbacks; the font files
@@ -227,6 +229,26 @@ export function LedgerRow({
   // same render logic as live rather than duplicating it.
   const displayInference = replayedInference ?? inference;
 
+  // Does this payment currently require human attention? Same criteria and
+  // the same imported BREAK_WINDOW_MS as the Operational State (#021 —
+  // shared constant, thresholds structurally cannot drift). Computed from
+  // the LIVE inference, never a replayed one: remediation actions attach to
+  // the present. The clock read is the same bounded exception as #021's —
+  // "does this need attention now" is inherently a live question.
+  const requiresAttention = useMemo(() => {
+    if (inference.state === "BREAK") return true;
+    if (
+      inference.state === "VERIFIED" &&
+      inference.signals.some(
+        (s) => s.kind === "insufficient_observation_coverage",
+      ) &&
+      Date.now() - Date.parse(event.observed_at) >= BREAK_WINDOW_MS
+    ) {
+      return true;
+    }
+    return false;
+  }, [inference, event]);
+
   const color = stateColor(displayInference.state);
   const isBreak = displayInference.state === "BREAK";
 
@@ -417,6 +439,18 @@ export function LedgerRow({
               </span>
             </div>
           ))}
+
+          {/* Remediation (#030): human actions on a payment requiring
+              attention, plus the permanent history of past actions. Fed by
+              the LIVE inference and hidden behind no extra depth — an
+              operator acting on a BREAK should not have to dig. Actions are
+              disabled while replaying (historical view is not the place to
+              act on the present). */}
+          <RemediationSection
+            event={event}
+            liveInference={inference}
+            actionsEnabled={requiresAttention && !replayAsOf}
+          />
 
           {/* Text/ghost button (§7): no background, ink text, underline on
               hover. */}

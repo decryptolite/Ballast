@@ -971,3 +971,95 @@ creep with real transfer cost (multi-KB × hundreds of rows × 10s poll).
 raw payload (order of a few KB per row) every 15s. Acceptable at current
 row counts; revisit alongside pagination if the table grows.
 **Status:** Accepted.
+
+---
+
+### Decision #029 — #027 RESOLVED: stale browser tab, not a code defect
+**Resolution (verified by the user in a real browser, reported directly):**
+the flat-table rendering reported in #027 was a stale browser tab. A fresh
+incognito session against the running dev server rendered row-expansion,
+the badge treatment, evidence signal lines, and the Audit section
+correctly, with a clean console. This closes #027's required revisit: the
+UI work from #021/#023/#025/#028 is now confirmed genuinely working in a
+browser — the first browser-level confirmation of these surfaces, upgrading
+what had been compiler-plus-headless-verification-only (the MEDIUM
+rendered-appearance caveats in those entries).
+**Contributing factor now moot:** #027's divergence hypothesis
+(uncommitted work vs. pushed repo) was eliminated in the same session by
+commits 2529b02/6763696 — local tree and origin/master now match.
+**Status:** Accepted. #027 closed.
+
+---
+
+### Decision #030 — BREAK remediation workflow: promoted to Build Now and
+### built (minimal model); resolves Open Question #3
+**Classification (user ruling):** BREAK remediation promoted from
+unclassified to Build Now — the "most important remaining gap" per
+BALLAST_MASTER_SPEC §19/§24 and PARKING_LOT's own reclassify flag. This
+resolves the master spec's Open Question #3.
+
+**Model built — the type separation is the architecture:**
+- New append-only table `remediation_events`
+  (migration `20260729000000_create_remediation_log.sql`): HUMAN-ACTION
+  records, architecturally distinct from system evidence per PARKING_LOT's
+  hard prerequisite. The inference engine never reads it — enforced
+  structurally (`inferStateV1` performs no I/O and takes no such input) and
+  documented in the table comments. **A resolved BREAK is still a BREAK in
+  engine terms; "resolved" is a human claim displayed beside the engine's
+  conclusion, never in place of it.**
+- Append-only with the same real enforcement as the evidence tables (#009):
+  RLS public-read, service-role-insert, explicit `REVOKE UPDATE, DELETE`
+  from all three roles. Corrections are new records, never edits.
+- **Write path:** only through `POST /api/ballast/remediation` — gated by
+  the app's session cookie, inserting with the server-side service role.
+  The browser's anon key is read-only on this table. Validation: action
+  whitelist, note capped at 2000 chars, **resolve requires a non-empty
+  note** (a resolution that cannot defend its outcome later is worthless
+  for audit — the record exists for Layer 4).
+- **UI:** `components/dashboard/remediation-section.tsx` +
+  `hooks/use-remediation.ts`, rendered inside the expanded row at
+  Understanding level (an operator acting on a BREAK should not have to
+  dig to Audit), after the evidence signals. History is permanent and
+  shown whenever records exist, even after the payment stops requiring
+  attention; action buttons appear only while it does. Ink-tone treatment
+  only — remediation is UI action, not payment state, so state colors are
+  untouched; submit failures use the §3 system-error token, deliberately
+  not the BREAK color.
+
+**Design calls made and flagged for ratification (the #023→#024 pattern):**
+1. **Two actions only — acknowledge, resolve.** No "assign": the app has a
+   single demo identity, so ownership semantics would be fiction. Add when
+   real identity exists.
+2. **`actor` = 'operator' placeholder** for the same reason (spec §16's
+   demo-credential caveat).
+3. **Attention criteria in the row** duplicate the Operational State's
+   predicate but import the same `BREAK_WINDOW_MS` from the engine —
+   thresholds structurally cannot drift (#021's discipline). Computed from
+   the LIVE inference only; actions are disabled during Timeline Replay
+   (historical view is not the place to act on the present) and the clock
+   read is the same bounded #021-style exception.
+4. **Actions stay available while attention persists, even after a resolve
+   record exists** — append-only philosophy: never lock a log because
+   someone wrote in it; a wrong resolution is corrected by a newer record.
+5. **Operational State integration deferred** (showing
+   acknowledged/resolved status in the attention list) — a real follow-up,
+   not silently included; it would add a remediation query to a hook whose
+   independence #021 deliberately protects.
+
+**Not applied:** the migration — same credential constraint as #013;
+verified empirically that the UI and hook degrade honestly (live query
+against the real DB returns "Could not find the table ... in the schema
+cache", which the hook maps to an explicit "Remediation log unavailable —
+migration not applied" notice, never a crash or silent absence). Apply via
+`supabase db push` or the dashboard SQL editor, as with #013→#016.
+
+**Verification:** `tsc --noEmit` clean project-wide (exit 0); the
+missing-table degradation verified against the live database. Browser
+verification not performed this session (same tooling constraint); the
+write path additionally cannot be exercised at all until the migration is
+applied — both stated rather than claimed.
+**Confidence:** HIGH on schema/enforcement/route validation/type separation
+(verified from code and live DB behavior). MEDIUM on the section's rendered
+appearance and the end-to-end write path (unexercisable until migration is
+applied; server-side logic reasoned + type-checked only).
+**Status:** Accepted (design calls 1-5 above awaiting ratification).
