@@ -939,3 +939,35 @@ was not identified).
 until a full build is ready, per instruction. MUST be revisited and
 positively closed (identify the viewed instance, confirm it now renders
 the built UI) before any final testing, demo, or submission.
+
+---
+
+### Decision #028 — verification_events.raw surfaced in Audit depth
+### (deferred from #023/#024, now approved and done)
+**Decision:** Widened the ledger's verification_events select in
+`hooks/use-observability.ts` by one column (`raw`) and surfaced it in the
+Audit depth of `components/dashboard/ledger-row.tsx` with the same visual
+treatment as the existing chain_observations raw display (mono, small,
+ink-tertiary, scrollable). Engine and observer untouched.
+**Behavior unchanged beyond the widening — verified empirically, not
+assumed:** old vs new select against the live database return the same 308
+rows, same ids, same order; all 308 carry a non-null raw with the expected
+capture shape (requirements, settleResult, verifyResult, paymentPayload).
+Same table, same ordering, no filter change.
+**Presentation call:** the Audit block "verification_event (as fetched)"
+now renders the row minus `raw`, and the payload gets its own labeled
+block ("raw payload (as captured at verification)") — duplicating a
+multi-KB payload inside two JSON blocks would be noise, not evidence. A
+row with no payload says so plainly rather than rendering an empty block.
+**Typing:** new exported `FetchedVerificationEvent` (engine's input shape
++ id + raw) in the hook; the engine's own `VerificationEventInput` type is
+untouched — `raw` is display-only evidence the engine neither requires nor
+reads, and passing it as an extra property is structurally inert.
+**Scope note:** `use-operational-state.ts`'s own query deliberately NOT
+widened — its classification job doesn't need the payload, and per #021
+its query is deliberately independent; widening it would be silent scope
+creep with real transfer cost (multi-KB × hundreds of rows × 10s poll).
+**Known cost, accepted:** the ledger hook's poll now transfers each event's
+raw payload (order of a few KB per row) every 15s. Acceptable at current
+row counts; revisit alongside pagination if the table grows.
+**Status:** Accepted.

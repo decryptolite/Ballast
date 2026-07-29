@@ -27,9 +27,9 @@ import { useMemo, useState } from "react";
 import {
   inferStateV1,
   type ChainObservationInput,
-  type VerificationEventInput,
   type Inference,
 } from "@/lib/ballast/infer-state-v1";
+import type { FetchedVerificationEvent } from "@/hooks/use-observability";
 
 // --- Design tokens (BALLAST_DESIGN_SYSTEM.md §3/§4/§14), scoped here. ---
 // IBM Plex is referenced by CSS family name with fallbacks; the font files
@@ -152,10 +152,10 @@ export function LedgerRow({
   observations,
   events,
 }: {
-  event: VerificationEventInput & { id: string };
+  event: FetchedVerificationEvent;
   inference: Inference;
   observations: ChainObservationInput[];
-  events: (VerificationEventInput & { id: string })[];
+  events: FetchedVerificationEvent[];
 }) {
   const [depth, setDepth] = useState<Depth>("priority");
 
@@ -472,7 +472,43 @@ export function LedgerRow({
               >
                 verification_event (as fetched)
               </div>
-              <pre style={preStyle}>{JSON.stringify(event, null, 2)}</pre>
+              <pre style={preStyle}>
+                {JSON.stringify(
+                  // Row fields only — the full raw capture gets its own
+                  // labeled block below rather than being duplicated here.
+                  (({ raw: _raw, ...row }) => row)(event),
+                  null,
+                  2,
+                )}
+              </pre>
+
+              <div
+                style={{
+                  fontFamily: T.sans,
+                  fontSize: 13,
+                  color: T.inkTertiary,
+                  marginTop: 12,
+                }}
+              >
+                verification_event raw payload (as captured at verification)
+              </div>
+              {event.raw !== undefined && event.raw !== null ? (
+                <pre style={preStyle}>
+                  {JSON.stringify(event.raw, null, 2)}
+                </pre>
+              ) : (
+                <div
+                  style={{
+                    fontFamily: T.serif,
+                    fontSize: 14,
+                    lineHeight: 1.6,
+                    color: T.inkTertiary,
+                    marginTop: 4,
+                  }}
+                >
+                  No raw payload present on this row.
+                </div>
+              )}
 
               <div
                 style={{

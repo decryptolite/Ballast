@@ -47,8 +47,17 @@ const DISPLAY_LIMIT = 40;
 // is cheap at the current row counts (low hundreds).
 const POLL_INTERVAL_MS = 15_000;
 
+/** verification_events row as fetched for the ledger: the engine's input
+ * shape plus the DB id and — for the Audit depth (DECISIONS.md #024/#028) —
+ * the full raw capture. `raw` is display-only evidence; the engine neither
+ * requires nor reads it. */
+export type FetchedVerificationEvent = VerificationEventInput & {
+  id: string;
+  raw?: unknown;
+};
+
 export interface ObservedPayment {
-  event: VerificationEventInput & { id: string };
+  event: FetchedVerificationEvent;
   inference: Inference;
 }
 
@@ -58,9 +67,8 @@ export interface ObservabilityData {
    * siblingEvents for the inference calls above (ascending observed_at).
    * Exposed for the ledger row's Timeline Replay, which must re-run
    * inferStateV1 with the sibling set truncated to the replay moment.
-   * Return-shape addition only — queries byte-identical (see DECISIONS.md
-   * #023/#025). */
-  events: (VerificationEventInput & { id: string })[];
+   * Return-shape addition only (see DECISIONS.md #023/#025). */
+  events: FetchedVerificationEvent[];
   /** All chain_observations rows exactly as already fetched for the
    * inference calls above (ascending observed_at). Exposed for the ledger
    * row's Audit depth — this is a return-shape addition only; the Supabase
@@ -98,9 +106,7 @@ function readPendingBatchValue(obs: ChainObservationInput): number | null {
 
 export function useObservability(): ObservabilityData {
   const [payments, setPayments] = useState<ObservedPayment[]>([]);
-  const [events, setEvents] = useState<(VerificationEventInput & { id: string })[]>(
-    [],
-  );
+  const [events, setEvents] = useState<FetchedVerificationEvent[]>([]);
   const [observations, setObservations] = useState<ChainObservationInput[]>(
     [],
   );
@@ -119,7 +125,10 @@ export function useObservability(): ObservabilityData {
       supabase
         .from("verification_events")
         .select(
-          "id, payment_id, amount, endpoint, authorization_ref, observed_at",
+          // `raw` added per DECISIONS.md #024/#028 for the Audit depth.
+          // Column-widening only: same table, same rows, same ordering, no
+          // filter change.
+          "id, payment_id, amount, endpoint, authorization_ref, observed_at, raw",
         )
         .order("observed_at", { ascending: true }),
       supabase
@@ -141,9 +150,7 @@ export function useObservability(): ObservabilityData {
       return;
     }
 
-    const allEvents = eventsResult.data as (VerificationEventInput & {
-      id: string;
-    })[];
+    const allEvents = eventsResult.data as FetchedVerificationEvent[];
     const allObservations = observationsResult.data as ChainObservationInput[];
 
     const displayed = allEvents.slice(-DISPLAY_LIMIT).reverse();
