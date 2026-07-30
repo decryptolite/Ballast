@@ -28,8 +28,47 @@ import {
 } from "./assistant";
 
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
-const DEFAULT_MODEL = "gpt-4o-mini";
+const OPENAI_DEFAULT_MODEL = "gpt-4o-mini";
 const TIMEOUT_MS = 20_000;
+
+const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
+/**
+ * Chosen empirically, not from memory (DECISIONS.md #035). Verified against
+ * this key's own ListModels output and by a real generateContent call:
+ * `gemini-2.5-flash-lite` — the id prior knowledge would have suggested —
+ * now returns 404 "no longer available to new users". Flash-Lite is the
+ * smallest/fastest tier, which suits a short evidence-explanation task.
+ * Overridable via GEMINI_MODEL without a code change.
+ */
+const GEMINI_DEFAULT_MODEL = "gemini-3.5-flash-lite";
+
+/** Response contract shared by every provider: the explanation layer may
+ * only produce prose plus indexes into the engine's real signal array. */
+const RESPONSE_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    answerable: { type: "BOOLEAN" },
+    answer: { type: "STRING" },
+    cited_signal_indexes: { type: "ARRAY", items: { type: "INTEGER" } },
+  },
+  required: ["answerable", "answer", "cited_signal_indexes"],
+} as const;
+
+function normalizeResult(parsed: {
+  answerable?: unknown;
+  answer?: unknown;
+  cited_signal_indexes?: unknown;
+}): ExplanationResult {
+  return {
+    answerable: parsed.answerable !== false,
+    answer: typeof parsed.answer === "string" ? parsed.answer : "",
+    citedIndexes: Array.isArray(parsed.cited_signal_indexes)
+      ? parsed.cited_signal_indexes.filter(
+          (n): n is number => typeof n === "number",
+        )
+      : [],
+  };
+}
 
 /** A real OpenAI key starts with `sk-` and is far longer than any template
  * placeholder. This is what keeps the unfilled `.env.example` value from
@@ -96,15 +135,7 @@ class OpenAIProvider implements ExplanationProvider {
         cited_signal_indexes?: unknown;
       };
 
-      return {
-        answerable: parsed.answerable !== false,
-        answer: typeof parsed.answer === "string" ? parsed.answer : "",
-        citedIndexes: Array.isArray(parsed.cited_signal_indexes)
-          ? parsed.cited_signal_indexes.filter(
-              (n): n is number => typeof n === "number",
-            )
-          : [],
-      };
+      return normalizeResult(parsed);
     } catch (err) {
       // Any transport/parse failure degrades to the deterministic path.
       console.error(
@@ -118,14 +149,119 @@ class OpenAIProvider implements ExplanationProvider {
   }
 }
 
+class GeminiProvider implements ExplanationProvider {
+  readonly name = "gemini";
+  readonly available = true;
+  constructor(
+    private readonly apiKey: string,
+    private readonly model: string,
+  ) {}
+
+  async explain(req: ExplanationRequest): Promise<ExplanationResult | null> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    try {
+      const res = await fetch(
+        `${GEMINI_BASE}/${this.model}:generateContent`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            // Header auth, not the `?key=` query parameter the docs show:
+            // a secret in a URL leaks into logs, proxies and error strings.
+            "x-goog-api-key": this.apiKey,
+          },
+          signal: controller.signal,
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+            contents: [
+              { role: "user", parts: [{ text: buildUserPrompt(req) }] },
+            ],
+            generationConfig: {
+              // This layer rephrases fixed facts; sampling variety has no
+              // upside and would undermine reproducible explanations.
+              temperature: 0,
+              responseMimeType: "application/json",
+              responseSchema: RESPONSE_SCHEMA,
+            },
+          }),
+        },
+      );
+
+      // Status only — never the body, which can echo the request.
+      if (!res.ok) {
+        console.error(
+          `[ballast/assistant] gemini HTTP ${res.status}; falling back to deterministic explanation`,
+        );
+        return null;
+      }
+
+      const payload = await res.json();
+      const text = payload?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (typeof text !== "string") return null;
+
+      return normalizeResult(JSON.parse(text));
+    } catch (err) {
+      console.error(
+        "[ballast/assistant] gemini call failed; falling back to deterministic explanation:",
+        err instanceof Error ? err.message : String(err),
+      );
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+}
+
+/** Gemini keys do not share OpenAI's `sk-` shape; check length and reject the
+ * template placeholder pattern instead. */
+function isRealGeminiKey(key: string | undefined): key is string {
+  return (
+    typeof key === "string" &&
+    key.length > 20 &&
+    !/your-|xxx|placeholder|TODO/i.test(key)
+  );
+}
+
+/**
+ * Provider selection: explicit override first, then whichever key is actually
+ * configured (Gemini preferred — it is the project's chosen provider,
+ * DECISIONS.md #034/#035), then unavailable.
+ *
+ * Chosen over hardcoding one provider so that adding or removing a key is
+ * pure configuration: no code edit, no redeploy of logic, and the OpenAI
+ * implementation stays available rather than being deleted. Set
+ * BALLAST_LLM_PROVIDER=gemini|openai|none to force a specific path.
+ */
 export function getExplanationProvider(): ExplanationProvider {
-  const key = process.env.OPENAI_API_KEY;
-  if (!isRealKey(key)) {
+  const forced = process.env.BALLAST_LLM_PROVIDER?.toLowerCase();
+  const geminiKey = process.env.GEMINI_API_KEY;
+  const openaiKey = process.env.OPENAI_API_KEY;
+
+  if (forced === "none") {
     return new UnavailableProvider(
-      "No LLM API key is configured (OPENAI_API_KEY is absent or is the " +
-        "unfilled template placeholder). Answers are composed deterministically " +
-        "from engine output.",
+      "Explanation layer disabled by BALLAST_LLM_PROVIDER=none. Answers are " +
+        "composed deterministically from engine output.",
     );
   }
-  return new OpenAIProvider(key, process.env.OPENAI_MODEL ?? DEFAULT_MODEL);
+
+  if (forced !== "openai" && isRealGeminiKey(geminiKey)) {
+    return new GeminiProvider(
+      geminiKey,
+      process.env.GEMINI_MODEL ?? GEMINI_DEFAULT_MODEL,
+    );
+  }
+
+  if (forced !== "gemini" && isRealKey(openaiKey)) {
+    return new OpenAIProvider(
+      openaiKey,
+      process.env.OPENAI_MODEL ?? OPENAI_DEFAULT_MODEL,
+    );
+  }
+
+  return new UnavailableProvider(
+    "No LLM API key is configured (checked GEMINI_API_KEY and " +
+      "OPENAI_API_KEY). Answers are composed deterministically from engine " +
+      "output.",
+  );
 }

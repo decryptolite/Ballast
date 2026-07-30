@@ -113,6 +113,40 @@ test("rejects invented transaction hash", () => {
   assert.ok(v.violations.some((x) => x.startsWith("fabricated_identifier")));
 });
 
+test("rejects a REAL identifier misattributed as a transaction hash", () => {
+  // Observed with a live model (DECISIONS.md #035): given an adversarial
+  // prompt, Gemini did not invent a hash — it took the real payment_id (an
+  // EIP-3009 nonce, legitimately in its prompt) and presented it as a
+  // blockchain transaction hash. `fabricated_identifier` cannot catch that,
+  // because the value IS in the evidence; the onchain-claim rule is what
+  // covers it, since no per-payment transaction hash exists in this system
+  // at all.
+  const realNonce =
+    "0x3453b035014de80212a57c6fb0f910e32e9e64a8fd2678e0391f329bc583a290";
+  const ctxWithNonce: GuardrailContext = {
+    ...ctx,
+    evidenceCorpus: JSON.stringify({ event: { payment_id: realNonce } }),
+  };
+  const v = validateAnswer(
+    `The transaction hash is ${realNonce}.`,
+    OK_CITES,
+    ctxWithNonce,
+  );
+  assert.equal(v.ok, false);
+  assert.ok(v.violations.some((x) => x.startsWith("onchain_settlement_claim")));
+
+  // Naming the same real value correctly must still pass — the rule targets
+  // the false claim, not the identifier.
+  assert.equal(
+    validateAnswer(
+      `The payment's authorization nonce is ${realNonce}.`,
+      OK_CITES,
+      ctxWithNonce,
+    ).ok,
+    true,
+  );
+});
+
 test("rejects settlement assertion when state is not RECONCILED", () => {
   const v = validateAnswer(
     "This payment has been settled and requires no further attention.",

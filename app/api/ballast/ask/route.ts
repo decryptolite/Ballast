@@ -208,8 +208,19 @@ export async function POST(req: NextRequest) {
       { explanation_layer: { available: true, note: "provider returned no usable output" } },
     );
   }
+  // The model declining is a statement about ITS ability to answer from the
+  // prompt, not proof the evidence is silent: the question already matched a
+  // known in-scope intent, so the deterministic composer has a real,
+  // evidence-grounded answer for it. Serving that beats a bare refusal —
+  // refusing when we hold a truthful answer is under-claiming, which is its
+  // own form of misrepresentation (DECISIONS.md #035).
   if (!result.answerable) {
-    return respond(REFUSAL, [], "refusal");
+    return respond(
+      deterministic.answer,
+      deterministic.citedIndexes,
+      "deterministic_fallback",
+      { explanation_layer: { available: true, note: "model declined; answered from engine output" } },
+    );
   }
 
   // --- Guardrails ---------------------------------------------------------

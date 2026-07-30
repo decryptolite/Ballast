@@ -1299,4 +1299,106 @@ Gemini means:
 - **Then verify the call path**, which is the one piece #033 could not
   exercise (recorded there as LOW/unexercised). That verification is
   provider-specific and must actually be run, not assumed.
+**Status:** Accepted. Executed by #035.
+
+---
+
+### Decision #035 — GeminiProvider implemented and verified live; model
+### chosen empirically; two real defects found by running it
+**Decision:** Implemented `GeminiProvider` in
+`lib/ballast/assistant-provider.ts` against the existing
+`ExplanationProvider` interface, exactly as scoped in #034. The route,
+guardrails, question gating, deterministic fallback and UI were not
+modified to accommodate it — the interface held, as predicted.
+
+**Model chosen empirically, and this mattered.** Rather than assume an id,
+queried this key's own `ListModels` (42 models support `generateContent`)
+and then made real `generateContent` calls with the production request
+shape. **`gemini-2.5-flash-lite` — the id prior knowledge would most likely
+have produced — returns HTTP 404, "no longer available to new users."**
+Tested working candidates at Flash-Lite tier (smallest/fastest, appropriate
+for a short explanation task): `gemini-3.1-flash-lite` (1001ms) and
+`gemini-3.5-flash-lite` (970ms), both schema-compliant with correct
+citations. Selected **`gemini-3.5-flash-lite`** — newest GA Flash-Lite,
+marginally faster in-sample; overridable via `GEMINI_MODEL`.
+
+**Auth via header, not the documented query parameter.** Google's docs show
+`?key=$GEMINI_API_KEY`. Used the `x-goog-api-key` header instead: a secret
+in a URL leaks into server logs, proxy logs and error strings. The key is
+read only from `process.env.GEMINI_API_KEY`, never logged; provider error
+paths log HTTP status only, never response bodies.
+
+**Provider selection — configurable by key presence, with override.**
+Order: `BALLAST_LLM_PROVIDER` (gemini|openai|none) → Gemini if its key is
+real → OpenAI if its key is real → unavailable. Chosen over hardcoding
+Gemini so adding or removing a key is pure configuration with no code edit,
+and the OpenAI implementation stays available rather than being deleted.
+Gemini-key detection cannot reuse the OpenAI `sk-` shape check, so it tests
+length plus the placeholder pattern.
+
+**Live verification against real payment evidence (dev server, real Gemini
+in the loop):** `source: "explanation_layer"` confirmed — e.g. "Why is this
+payment in this state?" returned a real model answer grounded in real
+signals, with the engine's authoritative RECONCILED @ 0.75 (v1) echoed
+alongside and real signal kinds cited.
+
+**Adversarial proof with the REAL model, not a simulated fabrication.** Ran
+the live model against the real evidence under an inverted system prompt
+instructing it to reassure, claim onchain settlement, cite a transaction
+hash, assert 0.99 confidence and speculate. Gemini complied. Its genuine
+output was fed through the real guardrails, which rejected it with four
+violations — `hedging_language:"probably"`,
+`certainty_overclaim:"proven"`, `onchain_settlement_claim:"settled
+on-chain"`, `confidence_mismatch:claimed_0.99_actual_0.75` — and the route
+served the deterministic answer instead. The same run under the production
+prompt passed cleanly (`ok=true`, no violations).
+
+**Finding that corrected my own assumption — misattribution, not
+fabrication.** The "transaction hash" the adversarial model cited was
+**not invented**: it was the real `payment_id` (the EIP-3009 nonce, which
+the prompt legitimately supplies), relabelled as a blockchain transaction
+hash. `fabricated_identifier` therefore correctly did not fire — the value
+IS in the evidence. The class is covered by a different rule: `transaction
+hash`/`tx hash` are onchain-claim terms, so calling *any* value a
+transaction hash is rejected regardless of whether it is real, which is
+correct because no per-payment transaction hash exists in this system at
+all. Verified in isolation, and locked in as a regression test (26 guardrail
+tests now pass): the same real nonce named correctly as an authorization
+nonce passes.
+
+**Two real defects found only by running it live:**
+1. **Under-claiming on model refusal.** Gemini returned `answerable:false`
+   for "What does this confidence value mean?", and the route served a bare
+   "The available evidence does not show that." — while the deterministic
+   composer held a genuine, evidence-grounded answer. Refusing when we hold
+   a truthful answer is its own misrepresentation. Fixed: a model decline on
+   an already-in-scope intent now falls back to the deterministic answer
+   (`deterministic_fallback`), not a refusal. Out-of-scope questions still
+   refuse before any model call, unchanged.
+2. **The model had no basis to explain confidence.** Root cause of (1): the
+   prompt gave the figure but not what it means. Fixed by passing
+   `confidence_basis` — computed deterministically by code from the signals
+   present, not by the model. The confidence question now returns a correct
+   `explanation_layer` answer.
+
+**Known limitation, honestly recorded:** for settlement-intent questions the
+model's answer is nearly always guardrail-rejected, because any discussion of
+onchain settlement — *including a correct denial* — trips the blunt
+onchain-claim rule (observed live: `onchain_settlement_claim:"settled
+onchain"` on a legitimate, non-adversarial prompt). The outcome is safe and
+arguably better, since the deterministic settlement answer is the stronger
+one, but in practice the LLM layer never serves this intent. Left as-is:
+loosening the rule to parse negation would trade a guaranteed safety
+property for prose quality, which is the wrong trade for this product.
+
+**Verification:** 26 guardrail tests pass; `tsc --noEmit` clean; live route
+exercised across four question classes (explanation_layer,
+deterministic_fallback, guardrail_rejected, refusal) against real evidence.
+No key material appears in any tracked file (`.env.local` remains ignored).
+**Confidence:** HIGH on the provider implementation, model choice, selection
+logic, live call path, and the adversarial guardrail proof — all executed
+against the real API with real evidence, not reasoned. MEDIUM on the
+rendered UI with a live provider (browser still unverified — same standing
+constraint). The OpenAI path remains unexercised (no key), now explicitly
+secondary.
 **Status:** Accepted.

@@ -133,7 +133,7 @@ function allIndexes(inference: Inference): number[] {
  * with the engine's scoring the way a duplicated table of magic numbers
  * would. The figure itself is always quoted from the inference.
  */
-function confidenceMeaning(inference: Inference): string {
+export function confidenceMeaning(inference: Inference): string {
   const c = inference.confidence;
   const kinds = new Set(inference.signals.map((s) => s.kind));
 
@@ -338,6 +338,11 @@ export function buildUserPrompt(req: ExplanationRequest): string {
         state: f.inference.state,
         confidence: f.inference.confidence,
         engine_version: f.inference.engine_version,
+        // Computed deterministically by code from the signals present, not
+        // by the model. Supplied because live testing showed the model
+        // (correctly) declining confidence questions when the prompt gave
+        // it no basis for what the figure means (DECISIONS.md #035).
+        confidence_basis: confidenceMeaning(f.inference),
       },
       signals: f.inference.signals.map((s, i) => ({
         index: i,

@@ -247,7 +247,7 @@ pending a platform/model switch.
 | Row-expansion depth interaction | Build Now (next) | Not yet built as distinct UI. |
 | Timeline Replay UI | Build Now / This Sprint | Engine-ready, UI pending. |
 | Audit Export | Build This Sprint | Formatting existing data; low net-new logic. |
-| Evidence Assistant ("Ask Ballast") | Built — v1, LLM-independent (DECISIONS.md #033) | Per-payment only. Guardrails enforced structurally + by validation, not by prompt. No LLM API configured; runs on a deterministic explanation path until a key exists. |
+| Evidence Assistant ("Ask Ballast") | Built — v1, live on Gemini (DECISIONS.md #033/#035) | Per-payment only. Guardrails enforced structurally + by validation, not by prompt — proven against real adversarial model output. Provider selected by key presence (Gemini preferred, `gemini-3.5-flash-lite`); falls back to deterministic answers whenever no key, a model decline, or a guardrail rejection occurs. |
 | Natural Language Investigation | After Hackathon | Build only atop Assistant's retrieval layer. |
 | BREAK remediation workflow | Build Now — promoted, minimal model built (DECISIONS.md #030) | Human-action records, type-separated from evidence, never engine input. Migration pending application. |
 | Historical Diff | After Hackathon | Built on Timeline Replay's asOf, not standalone. |
@@ -604,10 +604,12 @@ type-separation); Evidence Lifecycle/Retention Policy; Historical Diff
 - [x] Timeline Replay UI — built (#025/#026), verified on real evidence.
 - [x] Audit Export — built (#032, all calls ratified); real browser download
   test deferred to the batched browser-verification pass before Phase 3.
-- [x] Evidence Assistant — built v1 (#033), LLM-independent. Structural
-  guarantee verified adversarially: injected state/confidence/signals are
-  ignored in favour of real engine output. Conversation logging still
-  deferred (Open Question #2).
+- [x] Evidence Assistant — built v1 (#033), live on Gemini (#035).
+  Structural guarantee verified adversarially: injected
+  state/confidence/signals are ignored in favour of real engine output, and
+  a genuinely non-compliant live-model response was rejected by the
+  guardrails with four violations. Conversation logging still deferred
+  (Open Question #2).
 - [x] BREAK remediation workflow — built (#030/#031); happy-path insert
   deferred to final testing (no genuine attention case exists — see #031).
 
