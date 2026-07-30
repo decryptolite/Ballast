@@ -1265,3 +1265,38 @@ UI tasks). LOW/unexercised on the OpenAI provider call itself, which cannot
 be tested without a key; when one is added it should be verified before
 being relied on.
 **Status:** Accepted.
+
+---
+
+### Decision #034 — #033 approved; LLM provider will likely be Gemini, and
+### what that swap actually costs
+**Approval (user ruling):** the Evidence Assistant's LLM-independent
+architecture and the adversarial proof of the structural guarantee are
+accepted as correct, and as exceeding what was specified. Milestone
+committed and pushed as `841114e`.
+
+**Forward decision, recorded so it isn't a surprise later:** a real LLM key
+will likely be **Gemini (free tier)**, not OpenAI, added before the demo and
+verified against the real call path at that time. This is not urgent —
+everything shipped in #033 is proven independent of any model.
+
+**What the provider swap costs, stated concretely now rather than
+discovered later:** `lib/ballast/assistant-provider.ts` currently contains
+one concrete implementation, `OpenAIProvider`, chosen only because
+`OPENAI_API_KEY` is the credential this project already declared. Moving to
+Gemini means:
+- **Write one new class** implementing the existing `ExplanationProvider`
+  interface (~40 lines: a `fetch` to Gemini's `generateContent`, its
+  JSON-output mode, and the same parse into `{answerable, answer,
+  citedIndexes}`), plus a key-shape check in `getExplanationProvider()` and
+  a `GEMINI_API_KEY` entry in `.env.example`.
+- **Change nothing else.** The route, both guardrail layers, the question
+  gating, the deterministic fallback, the prompt contract, and the UI are
+  all provider-agnostic by construction. The guardrails validate model
+  output regardless of which model produced it, so the safety properties
+  verified in #033 carry over unchanged — a new provider inherits them
+  rather than needing them re-proven.
+- **Then verify the call path**, which is the one piece #033 could not
+  exercise (recorded there as LOW/unexercised). That verification is
+  provider-specific and must actually be run, not assumed.
+**Status:** Accepted.
