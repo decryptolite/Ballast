@@ -10,6 +10,7 @@
     "chain-observer": "node --experimental-transform-types --no-warnings --env-file=.env.local chain-observer.mts",
     "chain-observer:once": "node --experimental-transform-types --no-warnings --env-file=.env.local chain-observer.mts --once",
     "test:engine": "node --experimental-transform-types --no-warnings lib/ballast/infer-state-v1.test.mts",
+    "test:assistant": "node --experimental-transform-types --no-warnings lib/ballast/assistant-guardrails.test.mts",
     "infer:replay": "node --experimental-transform-types --no-warnings --env-file=.env.local infer-replay.mts"
   },
   "dependencies": {

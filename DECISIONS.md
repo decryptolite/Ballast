@@ -1166,3 +1166,102 @@ declared complete. The one remaining MEDIUM item — the real browser
 download test — is deferred to the batched browser-verification pass the
 user will run before Phase 3 (Evidence Assistant), alongside the other
 deferred browser checks (#030/#031's insert path among them).
+
+---
+
+### Decision #033 — Phase 3: Evidence Assistant v1 built LLM-independent;
+### no LLM API is configured, and the "never determines truth" rule is
+### enforced structurally rather than by prompt
+**Blocker found and reported before building (per instruction):** no LLM API
+is available. `OPENAI_API_KEY` in `.env.local` holds the unfilled
+`.env.example` template placeholder (19 chars, no `sk-` prefix, exact length
+match to `your-openai-api-key`); no other provider credential exists in the
+environment; no local model server; and although `@langchain/openai` and
+`deepagents` are installed, **no source file imports them** — there has never
+been LLM code in this repo. Network to `api.openai.com` is fine (HTTP 401 to
+a deliberately invalid probe), so this is purely a credential gap. No key or
+new service was added. **User ruling: build LLM-independent now**, with the
+provider behind an interface, inert until a key exists.
+
+**Pipeline, exactly as specified:** scoped retrieval → inferStateV1 → 
+explanation layer → answer terminating in cited evidence.
+
+**How "the LLM never determines payment truth" is enforced in CODE (the
+central deliverable), in two independent layers:**
+
+*Layer 1 — structural (app/api/ballast/ask/route.ts).* The client sends only
+`{verification_event_id, question}`. Evidence is retrieved server-side from
+the same two tables with the same ordering and the same sibling-event set the
+ledger hook passes — retrieval scoped IDENTICAL to the engine's input, not a
+looser parallel query, so the assistant cannot discuss anything the
+conclusion was not derived from. The conclusion is recomputed server-side by
+`inferStateV1`; because the engine is pure and deterministic (#004) this is
+byte-identical to what the row displays — the same inference independently
+derived, not a different one. State, confidence, engine version and the
+cited signal *objects* are therefore never parsed out of model text; the
+explanation layer may only choose which real signals to cite, **by index**.
+**Verified adversarially against the running server:** a request injecting
+`state:"BREAK"`, `confidence:1.0`, `engine_version:"v99"`, a pre-written
+answer and a fabricated signal returned the true engine values
+(RECONCILED @ 0.75, v1) with real signal kinds — every injected field
+ignored.
+
+*Layer 2 — validation (lib/ballast/assistant-guardrails.ts, pure).* A
+candidate answer is rejected outright for: hedging ("probably", "likely",
+"it appears", "seems to", "suggests that", …), certainty overclaim,
+onchain-settlement claims (no such signal exists per #008), settlement
+assertions when the state is not RECONCILED, any confidence figure differing
+from the engine's, identifiers or USDC amounts absent from the evidence
+corpus, citation of a non-existent signal, and answers citing no evidence at
+all. Rejection falls back to the deterministic answer, so a false positive
+costs plainer prose, never correctness — deliberately biased toward
+strictness.
+
+**The refusal is a real code path, not hoped-for behavior:** questions are
+classified before any generation. Cross-payment (Phase 4), predictive,
+advice-seeking, and norm-comparison questions ("slower than usual" —
+PARKING_LOT's "prediction wearing a disguise") return
+"The available evidence does not show that." without a model ever being
+called. The model can also self-declare `answerable:false`, which returns the
+same sentence.
+
+**Deterministic explanation layer (what actually runs today).** With no
+provider configured, answers are composed by code from real engine output —
+structurally incapable of hallucinating. Five intents: state, confidence,
+changed, evidence, settlement. Confidence is explained by keying off the
+SIGNALS present rather than a duplicated table of tier numbers, so it cannot
+drift from the engine's scoring; this also keeps the module free of any
+runtime engine import (type-only), which is what lets the guardrail suite run
+under Node's raw ESM loader.
+
+**Verification:** 25 guardrail tests pass (`npm run test:assistant`) — every
+adversarial case above is a fabricated model response that must be refused,
+plus over-rejection checks proving compliant answers, correctly-stated
+confidence, "not yet settled" negation, and real quoted references all pass.
+A real bug was caught by these tests: the norm-comparison gate matched
+"usually" but not "usual", letting "Is this slower than usual?" through —
+fixed, and `slower`/`faster`/`longer than` added. 14 engine tests still pass
+(no regression); `tsc --noEmit` clean. **Live route verified against real
+evidence** (deterministic path needs no LLM): 401 unauthorized; real
+in-scope answers citing real signals with true engine values; both refusal
+paths correct. First invocation returned a transient "Evidence unavailable"
+on cold compile, then 3/3 retries succeeded — same cold-start pattern noted
+in #031, not a defect.
+
+**Scope and deferrals, stated plainly:**
+- Conversations are NOT logged as evidence — Open Question #2 is unresolved,
+  so history is ephemeral (per-row, per-session). If that question resolves
+  to "yes", this needs a table and a write path; nothing built here blocks it.
+- Assistant disabled during Timeline Replay: the route answers about the LIVE
+  conclusion, so answering while a historical state is displayed would
+  mismatch the screen (same precedent as remediation actions, #030).
+- The OpenAI call path is written but **never executed** — no key. It is the
+  one part of this task that is unexercised code.
+**Confidence:** HIGH on the blocker diagnosis, both enforcement layers, the
+refusal paths, retrieval scoping, and the deterministic answers — all
+verified by tests and against the running server with real data. MEDIUM on
+the rendered UI appearance (not browser-verified — same constraint as prior
+UI tasks). LOW/unexercised on the OpenAI provider call itself, which cannot
+be tested without a key; when one is added it should be verified before
+being relied on.
+**Status:** Accepted.

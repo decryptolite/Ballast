@@ -33,6 +33,7 @@ import {
 import type { FetchedVerificationEvent } from "@/hooks/use-observability";
 import { RemediationSection } from "@/components/dashboard/remediation-section";
 import { AuditExportButton } from "@/components/dashboard/audit-export-button";
+import { AskBallast } from "@/components/dashboard/ask-ballast";
 
 // --- Design tokens (BALLAST_DESIGN_SYSTEM.md §3/§4/§14), scoped here. ---
 // IBM Plex is referenced by CSS family name with fallbacks; the font files
@@ -440,6 +441,11 @@ export function LedgerRow({
               </span>
             </div>
           ))}
+
+          {/* Ask Ballast (#033): contextual explanation of THIS payment,
+              inline beneath the evidence signal lines per §12 — never a
+              floating widget. */}
+          <AskBallast event={event} replaying={replayAsOf !== null} />
 
           {/* Remediation (#030): human actions on a payment requiring
               attention, plus the permanent history of past actions. Fed by
