@@ -16,83 +16,137 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// Plain by design (Phase 2 does the styling pass) — no color, no icons.
-// Just correct, live, prominent text, per this task's explicit scope.
+// Ballast — Operational State, styled per BALLAST_DESIGN_SYSTEM.md §7/§11.
+//
+// Full-width band at the top of the content. Background is --paper, the same
+// as the page: it is not a card and does not float above the content — it IS
+// the top of the content, always present (§7). In attention state it takes a
+// 4px --break left border; in calm state it carries no accent at all, and
+// that absence is itself part of the signal.
+//
+// Styling only — no logic, query, or threshold was changed in this pass.
 
 "use client";
 
 import { useState } from "react";
 import { useOperationalState } from "@/hooks/use-operational-state";
+import {
+  color,
+  space,
+  text,
+  borderWidth,
+  evidenceLine,
+} from "@/lib/ballast/design-tokens";
+
+/** §7 loading/error voice: calm, static, monospace. No spinner. State what is
+ * known and what is not — never apologise theatrically. */
+function Band({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ ...text.dataLg, color: color.inkTertiary, marginBottom: space.lg }}>
+      {children}
+    </div>
+  );
+}
 
 export function OperationalState() {
   const { level, message, flaggedPayments, loading, error } =
     useOperationalState();
   const [expanded, setExpanded] = useState(false);
 
-  if (loading) {
-    return (
-      <div style={{ fontSize: 18, fontWeight: "bold", marginBottom: 16 }}>
-        Loading operational state...
-      </div>
-    );
-  }
+  if (loading) return <Band>Reading evidence…</Band>;
+  if (error) return <Band>Operational state unavailable — {error}</Band>;
 
-  if (error) {
-    return (
-      <div style={{ fontSize: 18, fontWeight: "bold", marginBottom: 16 }}>
-        Operational state unavailable: {error}
-      </div>
-    );
-  }
+  const attention = level === "attention";
 
-  const clickable = level === "attention";
+  // §7: accent ONLY in the attention state. --break here is the
+  // directly-associated accent for payments the engine flagged, which is
+  // exactly the permitted use under §16.
+  const band: React.CSSProperties = {
+    background: color.paper,
+    padding: attention
+      ? `${space.md}px ${space.lg}px`
+      : `${space.md}px 0`,
+    marginBottom: space.lg,
+    ...(attention
+      ? { borderLeft: `${borderWidth.accent}px solid ${color.break}` }
+      : {}),
+  };
+
+  const headline: React.CSSProperties = {
+    ...text.dataLg,
+    color: attention ? color.break : color.ink,
+  };
 
   return (
-    <div style={{ marginBottom: 16 }}>
-      {clickable ? (
+    <section style={band} aria-label="Current operational state">
+      {attention ? (
         <button
+          className="blst-ghost"
           onClick={() => setExpanded((e) => !e)}
+          aria-expanded={expanded}
           style={{
-            fontSize: 18,
-            fontWeight: "bold",
+            ...headline,
             background: "none",
             border: "none",
+            borderRadius: 0,
             padding: 0,
             cursor: "pointer",
-            textDecoration: "underline",
-            font: "inherit",
+            textAlign: "left",
           }}
         >
           {message}
         </button>
       ) : (
-        <div style={{ fontSize: 18, fontWeight: "bold" }}>{message}</div>
+        <div style={headline}>{message}</div>
       )}
 
       {/*
-        Inline list rather than a pure scroll-to: this component is required
-        to be correct even when the ledger below hasn't rendered the row in
-        question (it only shows the most recent 40 payments — see
+        Inline list rather than a pure scroll-to: this component must stay
+        correct even when the ledger below has not rendered the row in
+        question (it shows only the most recent 40 — see
         hooks/use-observability.ts DISPLAY_LIMIT). Depending solely on
         scrolling to a DOM node that might not exist would violate the same
-        independence requirement this component exists to satisfy. The
-        anchor link is still attempted as a best-effort convenience when the
-        row *is* on screen.
+        independence requirement this component exists to satisfy. The anchor
+        remains a best-effort convenience when the row IS on screen.
       */}
-      {clickable && expanded && (
-        <ul style={{ marginTop: 8, paddingLeft: 20, fontSize: 14 }}>
+      {attention && expanded && (
+        <ul
+          className="blst-unfold"
+          style={{
+            listStyle: "none",
+            margin: 0,
+            marginTop: space.sm,
+            padding: 0,
+            paddingLeft: space.lg,
+          }}
+        >
           {flaggedPayments.map(({ event, inference, reason, elapsedMs }) => (
-            <li key={event.id} style={{ marginBottom: 6 }}>
-              <a href={`#payment-${event.id}`}>
-                {event.endpoint} — {event.amount} USDC
-              </a>{" "}
-              — {reason === "break" ? "BREAK" : "no observation coverage"},{" "}
-              {Math.floor(elapsedMs / 60_000)}m since verification, state=
-              {inference.state} confidence={inference.confidence}
+            <li key={event.id} style={{ marginBottom: space.sm }}>
+              <a
+                className="blst-ghost"
+                href={`#payment-${event.id}`}
+                style={{ ...text.ui, color: color.ink }}
+              >
+                {event.endpoint}
+              </a>
+              <span style={{ ...text.data, color: color.inkSecondary }}>
+                {" "}
+                {event.amount} USDC
+              </span>
+              <div style={{ marginTop: space.xxs }}>
+                <span style={evidenceLine.tag}>
+                  [{reason === "break" ? "break" : "insufficient_observation_coverage"}]
+                </span>{" "}
+                <span style={evidenceLine.detail}>
+                  {Math.floor(elapsedMs / 60_000)} minutes since verification;
+                  engine reports {inference.state} at confidence{" "}
+                  {inference.confidence}.
+                </span>
+              </div>
             </li>
           ))}
         </ul>
       )}
-    </div>
+    </section>
   );
 }

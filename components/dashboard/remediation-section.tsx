@@ -27,19 +27,21 @@ import { useState } from "react";
 import { useRemediation } from "@/hooks/use-remediation";
 import type { FetchedVerificationEvent } from "@/hooks/use-observability";
 import type { Inference } from "@/lib/ballast/infer-state-v1";
+import { button, color, font, radius } from "@/lib/ballast/design-tokens";
 
 // Same scoped tokens as ledger-row (BALLAST_DESIGN_SYSTEM.md §3/§4).
 // Remediation is UI action, not payment state — ink treatment only, no
 // state colors (§3 usage rules).
+// Shared tokens (globals.css custom properties) — not a local hex table.
 const T = {
-  paper: "#F7F5F0",
-  ink: "#1A1A17",
-  inkSecondary: "#55534C",
-  inkTertiary: "#8C8A80",
-  border: "#E4E1D8",
-  serif: `"IBM Plex Serif", Georgia, "Times New Roman", serif`,
-  sans: `"IBM Plex Sans", system-ui, "Segoe UI", sans-serif`,
-  mono: `"IBM Plex Mono", ui-monospace, Consolas, monospace`,
+  paper: color.paper,
+  ink: color.ink,
+  inkSecondary: color.inkSecondary,
+  inkTertiary: color.inkTertiary,
+  border: color.border,
+  serif: font.serif,
+  sans: font.sans,
+  mono: font.mono,
 } as const;
 
 function formatTime(iso: string): string {
@@ -176,7 +178,7 @@ export function RemediationSection({
               color: T.ink,
               background: T.paper,
               border: `1px solid ${T.border}`,
-              borderRadius: 2,
+              borderRadius: radius,
               padding: "6px 8px",
               width: "100%",
               maxWidth: 480,
@@ -184,41 +186,23 @@ export function RemediationSection({
             }}
           />
           <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
-            {/* Primary button (§7): ink background, paper text, sharp. */}
+            {/* §7 two-variant button system, from the shared tokens:
+                Primary = ink fill / paper text / 2px radius, never a pill.
+                Ghost = no background, ink text, underline on hover.
+                Disabled styling comes from the shared classes. */}
             <button
+              className="blst-primary"
               onClick={() => act("resolve")}
               disabled={submitting}
-              style={{
-                fontFamily: T.sans,
-                fontSize: 14,
-                fontWeight: 500,
-                color: T.paper,
-                background: T.ink,
-                border: "none",
-                borderRadius: 2,
-                padding: "6px 16px",
-                cursor: submitting ? "default" : "pointer",
-                opacity: submitting ? 0.5 : 1,
-              }}
+              style={button.primary}
             >
               Resolve
             </button>
-            {/* Ghost button (§7). */}
             <button
+              className="blst-ghost"
               onClick={() => act("acknowledge")}
               disabled={submitting}
-              className="blst-audit-toggle"
-              style={{
-                fontFamily: T.sans,
-                fontSize: 14,
-                fontWeight: 500,
-                color: T.ink,
-                background: "none",
-                border: "none",
-                padding: 0,
-                cursor: submitting ? "default" : "pointer",
-                opacity: submitting ? 0.5 : 1,
-              }}
+              style={button.ghost}
             >
               Acknowledge
             </button>
@@ -231,7 +215,7 @@ export function RemediationSection({
                 lineHeight: 1.4,
                 // System-error token (§3) — UI feedback, deliberately NOT
                 // the payment-state break color.
-                color: "#8C3A2E",
+                color: color.systemError,
                 marginTop: 8,
               }}
             >

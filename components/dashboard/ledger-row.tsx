@@ -34,25 +34,26 @@ import type { FetchedVerificationEvent } from "@/hooks/use-observability";
 import { RemediationSection } from "@/components/dashboard/remediation-section";
 import { AuditExportButton } from "@/components/dashboard/audit-export-button";
 import { AskBallast } from "@/components/dashboard/ask-ballast";
+import { color, font, stateBadge } from "@/lib/ballast/design-tokens";
 
-// --- Design tokens (BALLAST_DESIGN_SYSTEM.md §3/§4/§14), scoped here. ---
-// IBM Plex is referenced by CSS family name with fallbacks; the font files
-// are not bundled (no network font fetch at build time in this sandbox, no
-// vendored assets yet) — see DECISIONS.md. Falls back gracefully.
+// Design tokens now come from the shared module (lib/ballast/design-tokens),
+// which resolves to the CSS custom properties in globals.css — one source of
+// truth instead of a hex table per component. `T` is kept as a thin local
+// alias so existing markup reads unchanged.
 const T = {
-  paper: "#F7F5F0",
-  paperRaised: "#FCFBF8",
-  ink: "#1A1A17",
-  inkSecondary: "#55534C",
-  inkTertiary: "#8C8A80",
-  border: "#E4E1D8",
-  break: "#A3352B",
-  breakSurface: "#F5E8E5",
-  floating: "#A8874A",
-  reconciled: "#6B7A6C",
-  serif: `"IBM Plex Serif", Georgia, "Times New Roman", serif`,
-  sans: `"IBM Plex Sans", system-ui, "Segoe UI", sans-serif`,
-  mono: `"IBM Plex Mono", ui-monospace, Consolas, monospace`,
+  paper: color.paper,
+  paperRaised: color.paperRaised,
+  ink: color.ink,
+  inkSecondary: color.inkSecondary,
+  inkTertiary: color.inkTertiary,
+  border: color.border,
+  break: color.break,
+  breakSurface: color.breakSurface,
+  floating: color.floating,
+  reconciled: color.reconciled,
+  serif: font.serif,
+  sans: font.sans,
+  mono: font.mono,
 } as const;
 
 // §10 row anatomy: four fixed-position columns. Positions never shift
@@ -89,40 +90,10 @@ function formatTime(iso: string): string {
   return new Date(iso).toISOString().replace("T", " ").replace("Z", " UTC");
 }
 
-/** Mount once above the ledger — hover/focus/motion rules that inline
- * styles cannot express (§8 motion, §13 focus/reduced-motion). */
-export function LedgerRowStyles() {
-  return (
-    <style>{`
-      .blst-row-header {
-        transition: background-color 100ms linear;
-      }
-      .blst-row-header:hover {
-        background-color: rgba(26, 26, 23, 0.04);
-      }
-      .blst-row-header:focus-visible,
-      .blst-audit-toggle:focus-visible {
-        outline: 2px solid ${T.ink};
-        outline-offset: 2px;
-        transition: none;
-      }
-      .blst-unfold {
-        animation: blst-unfold-in 200ms ease-out;
-      }
-      @keyframes blst-unfold-in {
-        from { opacity: 0; }
-        to { opacity: 1; }
-      }
-      .blst-audit-toggle:hover {
-        text-decoration: underline;
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .blst-row-header { transition: none; }
-        .blst-unfold { animation: none; }
-      }
-    `}</style>
-  );
-}
+// The hover/focus/motion rules formerly injected here now live in
+// app/globals.css (§8/§13), applied app-wide rather than only beneath the
+// ledger — so every interactive surface gets the same 100ms wash, instant
+// 2px ink focus ring, and reduced-motion fallback.
 
 /** Column labels aligned to the same fixed grid as every row. */
 export function LedgerHeader() {
@@ -251,7 +222,9 @@ export function LedgerRow({
     return false;
   }, [inference, event]);
 
-  const color = stateColor(displayInference.state);
+  // Named badgeColor, not `color`, so it cannot shadow the imported token
+  // module at module scope.
+  const badgeColor = stateColor(displayInference.state);
   const isBreak = displayInference.state === "BREAK";
 
   // Audit depth: the raw evidence behind this row's conclusion — the
@@ -338,18 +311,7 @@ export function LedgerRow({
             2px left border as the only "container" — no pill fill. */}
         <span
           aria-label={`State: ${displayInference.state}`}
-          style={{
-            fontFamily: T.sans,
-            fontSize: 13,
-            lineHeight: 1.4,
-            fontWeight: 600,
-            textTransform: "uppercase",
-            letterSpacing: "0.02em",
-            color,
-            borderLeft: `2px solid ${color}`,
-            paddingLeft: 8,
-            justifySelf: "start",
-          }}
+          style={{ ...stateBadge(badgeColor), justifySelf: "start" }}
         >
           {displayInference.state}
         </span>

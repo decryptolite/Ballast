@@ -1402,3 +1402,91 @@ rendered UI with a live provider (browser still unverified — same standing
 constraint). The OpenAI path remains unexercised (no key), now explicitly
 secondary.
 **Status:** Accepted.
+
+---
+
+### Decision #036 — Phase 2 design pass applied app-wide; two spec hex
+### values corrected by measurement; two inherited violations fixed
+**Decision:** Applied BALLAST_DESIGN_SYSTEM.md across every surface, not
+only the ledger. Styling only — no logic, query, threshold or engine code
+was touched, and the engine (14) and assistant (26) test suites still pass
+unchanged.
+
+**Single source of truth replaces four duplicated token tables.** The §3
+palette now lives as CSS custom properties in `app/globals.css` (exactly as
+§3 specifies), with `lib/ballast/design-tokens.ts` holding only named
+`var()` references plus the §4 type scale, §5 spacing, §7 button variants,
+the state-badge helper and the evidence-line pattern. `ledger-row`,
+`ask-ballast`, `remediation-section` and `audit-export-button` each carried
+their own hex/font table; all four now draw from the shared module.
+
+**IBM Plex is now genuinely loaded, closing the gap flagged in #023.**
+`app/layout.tsx` previously loaded **Geist** — a generic modern sans, which
+is precisely what DESIGN_PHILOSOPHY.md's "not Inter as the sole typeface"
+prohibition targets. Replaced with IBM Plex Serif/Sans/Mono via `next/font`
+(self-hosted, no runtime request to Google). Verified in the served page:
+41 `@font-face` declarations and 5 self-hosted woff2 files, zero Geist
+references remaining. #023 had recorded Plex as "referenced by family name,
+files not bundled"; that is now resolved rather than still pending.
+
+**Retuning globals.css fixed app-wide violations without touching forked
+component code.** The inherited shadcn theme defined `--background: 0 0%
+100%` (pure white), `--radius: 0.5rem` (8px, where §14 caps at 2px), a
+saturated blue `--primary`, and a bright pink `--destructive`. Retuning the
+theme variables onto the paper/ink palette propagates to every inherited
+surface — sign-in, payments table, withdrawals, dialogs — with no edits to
+those components. `--destructive` was mapped to the SYSTEM error tone, never
+`--break`: shadcn's destructive is generic chrome and must not borrow
+payment-state authority (§3).
+
+**Two §3 hex values were wrong and are corrected by measurement, not
+opinion.** §13 instructs verifying contrast programmatically rather than
+trusting the document; doing so found:
+- `--ink-tertiary` `#8C8A80` measures **3.18:1** on `--paper` — below the
+  4.5:1 §3 itself mandates. It is used for captions and timestamps at 13px,
+  which is small text, so the 3:1 large-text allowance does not apply.
+  Darkened along the same hue to the first passing value **`#727067`**
+  (4.56:1 on paper, 4.80:1 on paper-raised).
+- `--system-warning` `#8A6D1F` measures **4.49:1** — short by a hair.
+  Nudged to **`#886B1F`** (4.62:1).
+All other pairs pass as specified: ink 16.01:1, ink-secondary 7.07:1, BREAK
+6.21:1, RECONCILED 4.17:1, FLOATING 3.09:1 (badge = large/UI text, 3:1 bar).
+State colors were left untouched — they pass, and altering them would shift
+the deliberate asymmetry.
+**Correction to my own audit:** I initially flagged the hairline border
+(1.20:1) as failing. It is not a violation — WCAG 1.4.11's 3:1 applies to UI
+components and meaningful graphics, not decorative/structural dividers, and
+raising it would destroy the "visible but quiet" quality §3 explicitly
+requires of the sacred alignment. Reported as a mis-specified check, not
+fixed.
+
+**Two genuine §16 violations found in inherited primitives, both fixed:**
+`components/ui/dialog.tsx` used `bg-black/50` for its overlay (now an ink
+scrim), and Tailwind's ring utilities defaulted `--tw-ring-offset-color` to
+`#fff`, which the shadcn badge/button/input/dialog focus states use (now
+paper). Remaining `#fff`/`#000` strings in the served CSS are Tailwind
+internals that nothing paints: the `--color-black` palette variable and an
+`@property` initial-value declaration.
+
+**Motion and focus are now app-wide, not ledger-local.** The hover/focus/
+unfold rules previously injected by a `LedgerRowStyles` component moved into
+`globals.css`: 100ms linear hover wash, instant 2px ink focus ring on every
+interactive element (§13), 200ms ease-out opacity unfold, and a
+`prefers-reduced-motion` fallback to instant. No bounce, spring, scale or
+spin exists anywhere.
+
+**Component named explicitly rather than left silent:** `OperationalState`
+was entirely unstyled — raw browser defaults, default-blue links, its own
+comment reading "Plain by design (Phase 2 does the styling pass)". It is now
+built to §7/§11: `--paper` background (it is not a card and does not float —
+it IS the top of the content), `--text-data-lg` headline, a 4px `--break`
+left border in the attention state only, and no accent at all when calm,
+that absence being part of the signal. Its flagged-payment list now reuses
+the evidence-line pattern instead of default list styling.
+**Confidence:** HIGH on the token architecture, font loading, contrast
+measurements and the violations found/fixed — all verified against the
+served CSS/HTML and by measurement, not assumed. MEDIUM on the aggregate
+visual result, which has not been seen in a browser (same standing
+constraint); the §16 checklist item requiring a human judgement of
+distinctiveness is explicitly not self-assessable and is left for review.
+**Status:** Accepted.

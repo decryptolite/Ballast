@@ -17,7 +17,7 @@
  */
 
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
+import { IBM_Plex_Serif, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "sonner";
 import "./globals.css";
@@ -32,10 +32,31 @@ export const metadata: Metadata = {
   description: "Arc nanopayments demo application",
 };
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// BALLAST_DESIGN_SYSTEM.md §4: the IBM Plex superfamily — one type system
+// across three optical purposes. Self-hosted by next/font (no runtime request
+// to Google), which also closes the "Plex not bundled" gap flagged in
+// DECISIONS.md #023. Geist was previously loaded here and is removed: a
+// generic modern sans is precisely what DESIGN_PHILOSOPHY.md's "not Inter as
+// the sole typeface" prohibition is about.
+const plexSerif = IBM_Plex_Serif({
+  variable: "--font-plex-serif",
   display: "swap",
   subsets: ["latin"],
+  weight: ["400", "600"],
+});
+
+const plexSans = IBM_Plex_Sans({
+  variable: "--font-plex-sans",
+  display: "swap",
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+});
+
+const plexMono = IBM_Plex_Mono({
+  variable: "--font-plex-mono",
+  display: "swap",
+  subsets: ["latin"],
+  weight: ["400", "500"],
 });
 
 export default function RootLayout({
@@ -45,7 +66,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${geistSans.className} antialiased`}>
+      <body
+        className={`${plexSerif.variable} ${plexSans.variable} ${plexMono.variable} antialiased`}
+      >
         <TooltipProvider>{children}</TooltipProvider>
         <Toaster richColors position="bottom-right" />
       </body>

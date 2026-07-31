@@ -19,32 +19,97 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* ---------------------------------------------------------------------------
+   Ballast design tokens — BALLAST_DESIGN_SYSTEM.md §3.
+   These are the single source of truth; lib/ballast/design-tokens.ts holds
+   only named var() references to them.
+   --------------------------------------------------------------------------- */
 :root {
-  --background: 0 0% 100%;
-  --foreground: 255 16.47% 33.33%;
-  --card: 0 0% 100%;
-  --card-foreground: 255 16.47% 33.33%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 255 16.47% 33.33%;
-  --primary: 204.62 100% 38.24%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 210 100% 97.25%;
-  --secondary-foreground: 204.62 100% 38.24%;
-  --muted: 252 20% 95.1%;
-  --muted-foreground: 253.33 11.79% 44.9%;
-  --accent: 258 100% 96.08%;
-  --accent-foreground: 255 25.53% 18.43%;
-  --destructive: 353.92 83.15% 65.1%;
-  --destructive-foreground: 0 0% 100%;
-  --border: 253.33 16.36% 89.22%;
-  --input: 253.33 16.36% 89.22%;
-  --ring: 204.1 100% 55.1%;
-  --chart-1: 204.1 100% 55.1%;
-  --chart-2: 259.15 100% 72.35%;
-  --chart-3: 150.98 75.41% 47.84%;
-  --chart-4: 21.9 100% 73.14%;
-  --chart-5: 294.95 88.43% 76.27%;
-  --radius: 0.5rem;
+  --paper: #f7f5f0;
+  --paper-raised: #fcfbf8;
+  --ink: #1a1a17;
+  --ink-secondary: #55534c;
+  /* §3 specifies #8C8A80, but that measures 3.18:1 on --paper — below the
+     4.5:1 §3 itself requires for text, and captions/timestamps are small
+     text, so the 3:1 large-text allowance does not apply. Darkened along the
+     same hue to the first passing value: 4.56:1 on paper, 4.80:1 on
+     paper-raised. §13 instructs verifying programmatically rather than
+     trusting the document, which is exactly what surfaced this. */
+  --ink-tertiary: #727067;
+  /* Named --border-hairline, not --border: shadcn already owns --border as an
+     HSL triple below, and colliding would break every bordered component. */
+  --border-hairline: #e4e1d8;
+  --border-strong: #c9c5b8;
+
+  /* Payment-state colors. §16: never used outside a state badge or its
+     directly-associated row accent. */
+  --break: #a3352b;
+  --break-surface: #f5e8e5;
+  --floating: #a8874a;
+  --reconciled: #6b7a6c;
+
+  /* System-level UI feedback ONLY — deliberately distinct from state colors
+     so a form error can never dilute BREAK's authority (§3). */
+  /* §3's #8A6D1F measures 4.49:1 — short of 4.5:1 by a hair. Nudged one
+     step darker along the same hue: 4.62:1. */
+  --system-warning: #886b1f;
+  --system-error: #8c3a2e;
+  --system-success: #4f6b52;
+
+  --hover-wash: rgba(26, 26, 23, 0.04);
+  --selection-wash: rgba(26, 26, 23, 0.08);
+
+  /* Tailwind's ring utilities default their offset to pure #fff, which the
+     inherited shadcn primitives (badge, button, input, dialog…) use for
+     focus. §16 admits no pure white, so the offset is paper. */
+  --tw-ring-offset-color: var(--paper);
+}
+
+/* ---------------------------------------------------------------------------
+   shadcn/Tailwind theme, retuned onto the Ballast palette (§3/§14).
+   Retuning here rather than restyling each forked component propagates
+   paper/ink to every inherited surface — sign-in, payments table,
+   withdrawals, dialogs — without touching their code.
+   Values are HSL triples because the @theme block below wraps them in hsl().
+   --------------------------------------------------------------------------- */
+:root {
+  /* #F7F5F0 — paper, never pure white (§16). */
+  --background: 45 33% 95%;
+  /* #1A1A17 — warm near-black, never #000. */
+  --foreground: 60 6% 10%;
+  /* #FCFBF8 — paper-raised: a whisper of elevation, never a shadow. */
+  --card: 45 43% 98%;
+  --card-foreground: 60 6% 10%;
+  --popover: 45 43% 98%;
+  --popover-foreground: 60 6% 10%;
+  /* Ink, not the previous saturated blue: §3 admits no brand accent hue. */
+  --primary: 60 6% 10%;
+  --primary-foreground: 45 33% 95%;
+  --secondary: 45 25% 92%;
+  --secondary-foreground: 60 6% 10%;
+  --muted: 45 25% 92%;
+  /* #727067 — ink-tertiary, contrast-corrected (see above). */
+  --muted-foreground: 49 5% 43%;
+  --accent: 45 25% 92%;
+  --accent-foreground: 60 6% 10%;
+  /* #8C3A2E — the SYSTEM error tone, not --break: shadcn's `destructive` is
+     generic UI chrome, and must never borrow payment-state authority. */
+  --destructive: 9 51% 36%;
+  --destructive-foreground: 45 33% 95%;
+  /* #E4E1D8 — hairline. */
+  --border: 43 21% 87%;
+  --input: 43 21% 87%;
+  /* Focus ring is ink, never colour-coded (§3). */
+  --ring: 60 6% 10%;
+  /* Charts are unused in Ballast; mapped onto ink tones so no vivid default
+     can leak in if a future surface renders one. */
+  --chart-1: 60 6% 10%;
+  --chart-2: 50 6% 53%;
+  --chart-3: 43 21% 87%;
+  --chart-4: 50 6% 33%;
+  --chart-5: 45 25% 92%;
+  /* §14: sharp, instrument-like. 2px maximum — never a pill. */
+  --radius: 2px;
 }
 
 @theme inline {
@@ -83,5 +148,108 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* §4: Plex Sans is the default UI voice. Serif and mono are applied
+       deliberately per element, never inherited by accident. */
+    font-family: var(--font-plex-sans), system-ui, sans-serif;
+  }
+
+  /* §3: 8% ink wash — no colour shift, only weight. */
+  ::selection {
+    background: var(--selection-wash);
+  }
+
+  /* §13 + §8: a visible 2px ink ring on every interactive element, instant
+     (no transition) — a delayed focus indicator harms keyboard perception. */
+  :focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 2px;
+    transition: none;
+  }
+
+  /* §4: tabular figures wherever numbers are set in mono, without exception —
+     misaligned numbers in a ledger are a credibility failure, not cosmetic. */
+  code,
+  pre,
+  kbd,
+  samp {
+    font-family: var(--font-plex-mono), ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   §8 Motion. Motion exists only because information changed.
+   No bounce, no spring, no scale, no spin — anywhere.
+   --------------------------------------------------------------------------- */
+@layer base {
+  .blst-unfold {
+    animation: blst-unfold-in 200ms ease-out;
+  }
+  @keyframes blst-unfold-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  /* §13: reduced motion falls back to instant state changes. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Shared Ballast interaction classes (§7 buttons, §8 motion).
+   Defined once here rather than re-declared per component.
+   --------------------------------------------------------------------------- */
+@layer components {
+  /* §7 Text/Ghost button — no background, ink text, underline on hover. */
+  .blst-ghost {
+    text-decoration: none;
+  }
+  .blst-ghost:hover:not(:disabled) {
+    text-decoration: underline;
+  }
+  .blst-ghost:disabled {
+    opacity: 0.5;
+    cursor: default;
+    text-decoration: none;
+  }
+
+  /* §7 Primary button — ink fill, paper text, sharp. */
+  .blst-primary {
+    transition: opacity 100ms linear;
+  }
+  .blst-primary:hover:not(:disabled) {
+    opacity: 0.88;
+  }
+  .blst-primary:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  /* §8 Hover — 100ms linear wash, weight shift only, never a colour shift. */
+  .blst-row-header {
+    transition: background-color 100ms linear;
+  }
+  .blst-row-header:hover {
+    background-color: var(--hover-wash);
+  }
+
+  /* Retained alias: ledger row and audit controls used this name before the
+     shared classes existed. Same treatment as .blst-ghost. */
+  .blst-audit-toggle {
+    text-decoration: none;
+  }
+  .blst-audit-toggle:hover:not(:disabled) {
+    text-decoration: underline;
   }
 }

@@ -16,22 +16,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// Ballast — Task 4: the first real observability screen.
-//
-// Functional, not designed (per task scope — no design system yet). Every
-// number on this page comes from a real query against verification_events
-// and chain_observations, and a real call to inferStateV1. Nothing here is
-// mocked, simulated, or hardcoded as a placeholder.
+// Ballast — the observability screen, styled per BALLAST_DESIGN_SYSTEM.md
+// §4/§5/§6/§7. Every number on this page comes from a real query against
+// verification_events and chain_observations, and a real call to
+// inferStateV1. Nothing here is mocked, simulated, or hardcoded.
 
 "use client";
 
 import { useObservability } from "@/hooks/use-observability";
 import { OperationalState } from "@/components/dashboard/operational-state";
-import {
-  LedgerHeader,
-  LedgerRow,
-  LedgerRowStyles,
-} from "@/components/dashboard/ledger-row";
+import { LedgerHeader, LedgerRow } from "@/components/dashboard/ledger-row";
+import { color, layout, space, text } from "@/lib/ballast/design-tokens";
 
 function formatUsdc(n: number | null): string {
   if (n === null) return "—";
@@ -56,47 +51,86 @@ export default function ObservePage() {
   } = useObservability();
 
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto", fontFamily: "monospace" }}>
-      <h1 style={{ fontSize: 20, fontWeight: "bold", marginBottom: 4 }}>
-        Ballast — Observability
+    <div style={{ maxWidth: layout.content, margin: "0 auto" }}>
+      <h1 style={{ ...text.h1, color: color.ink, margin: 0 }}>
+        Ballast
       </h1>
-      <p style={{ fontSize: 13, color: "#666", marginBottom: 20 }}>
-        Every value below is a real query against verification_events /
-        chain_observations, run through inferStateV1 (v1). No mocked data.
+      {/* Narrative sits at the reading measure (§5), not the full ledger width. */}
+      <p
+        style={{
+          ...text.body,
+          color: color.inkSecondary,
+          maxWidth: layout.narrative,
+          margin: `${space.xs}px 0 ${space.xl}px`,
+        }}
+      >
+        Every value below is a real query against verification_events and
+        chain_observations, run through inferStateV1 (v1).
       </p>
 
       <OperationalState />
 
-      <div
+      {/* Float total: a panel, so --paper-raised and a hairline border (§3/§5),
+          never a shadow. */}
+      <section
         style={{
-          border: "1px solid #ccc",
-          padding: 12,
-          marginBottom: 20,
-          fontSize: 14,
+          background: color.paperRaised,
+          border: `1px solid ${color.border}`,
+          padding: space.lg,
+          marginBottom: space.xl,
         }}
+        aria-label="Currently floating"
       >
-        <strong>Currently floating (pending_batch):</strong>{" "}
-        {loading ? "loading..." : `${formatUsdc(currentFloating)} USDC`}
-        <div style={{ fontSize: 12, color: "#666" }}>
-          as of {formatTime(currentFloatingAsOf)} — offchain, Circle-asserted,
-          aggregate across all sellers' payments (see DECISIONS.md #008).
-          Not per-payment settlement proof.
+        <div style={{ ...text.caption, color: color.inkTertiary }}>
+          Currently floating (pending_batch)
         </div>
-      </div>
+        <div
+          style={{
+            ...text.dataLg,
+            color: color.ink,
+            marginTop: space.xxs,
+          }}
+        >
+          {loading ? "Reading evidence…" : `${formatUsdc(currentFloating)} USDC`}
+        </div>
+        <div
+          style={{
+            ...text.caption,
+            color: color.inkTertiary,
+            maxWidth: layout.narrative,
+            marginTop: space.xs,
+          }}
+        >
+          as of {formatTime(currentFloatingAsOf)} — offchain, Circle-asserted,
+          aggregate across all of this seller&apos;s payments. Not per-payment
+          settlement proof.
+        </div>
+      </section>
 
+      {/* §3: a data-loading failure is generic UI chrome — it uses the SYSTEM
+          error tone, never --break, which belongs to payment state alone. */}
       {error && (
-        <div style={{ color: "crimson", marginBottom: 16 }}>
-          Error loading evidence: {error}
+        <div
+          style={{
+            ...text.ui,
+            color: color.systemError,
+            marginBottom: space.md,
+          }}
+        >
+          Evidence could not be loaded — {error}
         </div>
       )}
 
       {loading && payments.length === 0 ? (
-        <p>Loading real evidence...</p>
+        <p style={{ ...text.data, color: color.inkTertiary }}>
+          Reading evidence…
+        </p>
       ) : payments.length === 0 ? (
-        <p>No verification_events found.</p>
+        <p style={{ ...text.body, color: color.inkSecondary }}>
+          No payments observed yet.
+        </p>
       ) : (
         <div>
-          <LedgerRowStyles />
           <LedgerHeader />
           {payments.map(({ event, inference }) => (
             <LedgerRow
@@ -110,11 +144,17 @@ export default function ObservePage() {
         </div>
       )}
 
-      <p style={{ fontSize: 11, color: "#999", marginTop: 20 }}>
-        {payments.length} payment(s) shown (most recent {payments.length},
-        newest first) · engine v1 · last refreshed{" "}
+      <p
+        style={{
+          ...text.caption,
+          color: color.inkTertiary,
+          marginTop: space.lg,
+        }}
+      >
+        {payments.length} payment(s) shown, newest first · engine v1 · last
+        refreshed{" "}
         {lastRefreshedAt ? lastRefreshedAt.toISOString() : "never"} · polls
-        every 15s.
+        every 15s
       </p>
     </div>
   );

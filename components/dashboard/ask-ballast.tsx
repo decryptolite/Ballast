@@ -30,16 +30,18 @@
 import { useState } from "react";
 import type { FetchedVerificationEvent } from "@/hooks/use-observability";
 import type { InferenceSignal } from "@/lib/ballast/infer-state-v1";
+import { color, font, evidenceLine } from "@/lib/ballast/design-tokens";
 
+// Shared tokens (globals.css custom properties) — not a local hex table.
 const T = {
-  paper: "#F7F5F0",
-  ink: "#1A1A17",
-  inkSecondary: "#55534C",
-  inkTertiary: "#8C8A80",
-  border: "#E4E1D8",
-  serif: `"IBM Plex Serif", Georgia, "Times New Roman", serif`,
-  sans: `"IBM Plex Sans", system-ui, "Segoe UI", sans-serif`,
-  mono: `"IBM Plex Mono", ui-monospace, Consolas, monospace`,
+  paper: color.paper,
+  ink: color.ink,
+  inkSecondary: color.inkSecondary,
+  inkTertiary: color.inkTertiary,
+  border: color.border,
+  serif: font.serif,
+  sans: font.sans,
+  mono: font.mono,
 } as const;
 
 const SUGGESTED = [
@@ -195,18 +197,13 @@ export function AskBallast({
           {x.evidenceUsed.length > 0 && (
             <div style={{ marginTop: 8 }}>
               <div style={caption}>Evidence used</div>
+              {/* §12: reuses the ledger's established evidence-line pattern
+                  (mono bracketed tag + serif sentence) rather than inventing
+                  a separate citation style. */}
               {x.evidenceUsed.map((s, j) => (
                 <div key={j} style={{ marginTop: 4 }}>
-                  <span
-                    style={{
-                      fontFamily: T.mono,
-                      fontSize: 13,
-                      color: T.inkTertiary,
-                    }}
-                  >
-                    [{s.kind}]
-                  </span>{" "}
-                  <span style={prose}>{s.detail}</span>
+                  <span style={evidenceLine.tag}>[{s.kind}]</span>{" "}
+                  <span style={evidenceLine.detail}>{s.detail}</span>
                 </div>
               ))}
             </div>

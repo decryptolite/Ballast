@@ -57,7 +57,9 @@ function DialogOverlay({
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
       className={cn(
-        "fixed inset-0 z-50 bg-black/50 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
+        // Ink scrim, not bg-black: BALLAST_DESIGN_SYSTEM.md §16 admits no
+        // pure black anywhere. Styling only — behaviour unchanged.
+        "fixed inset-0 z-50 bg-[color:var(--ink)]/50 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
         className
       )}
       {...props}

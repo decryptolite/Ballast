@@ -32,6 +32,7 @@ import {
   buildAuditExport,
   type AuditExportRemediation,
 } from "@/lib/ballast/audit-export";
+import { button } from "@/lib/ballast/design-tokens";
 
 export function AuditExportButton({
   event,
@@ -93,23 +94,13 @@ export function AuditExportButton({
     URL.revokeObjectURL(url);
   }
 
+  // §7 Ghost button, from the shared tokens — no local font/hex literals.
   return (
     <button
-      className="blst-audit-toggle"
+      className="blst-ghost"
       onClick={handleExport}
       disabled={remediation.loading}
-      style={{
-        fontFamily: `"IBM Plex Sans", system-ui, "Segoe UI", sans-serif`,
-        fontSize: 14,
-        lineHeight: 1.5,
-        fontWeight: 500,
-        color: "#1A1A17",
-        background: "none",
-        border: "none",
-        padding: 0,
-        cursor: remediation.loading ? "default" : "pointer",
-        opacity: remediation.loading ? 0.5 : 1,
-      }}
+      style={button.ghost}
     >
       Export audit record (JSON)
     </button>
