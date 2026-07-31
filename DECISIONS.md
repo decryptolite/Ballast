@@ -1490,3 +1490,30 @@ visual result, which has not been seen in a browser (same standing
 constraint); the §16 checklist item requiring a human judgement of
 distinctiveness is explicitly not self-assessable and is left for review.
 **Status:** Accepted.
+
+---
+
+### Decision #037 — #036 ratified in full
+**Ratification (user ruling):** the Phase 2 design pass is accepted in full.
+Specifically called out as the two most important findings: the inherited
+shadcn theme being unstyled against the design system (pure-white
+background, 8px radius, saturated blue primary — fixed app-wide by retuning
+`globals.css` rather than editing forked components), and both contrast
+corrections (`--ink-tertiary` 3.18:1 → `#727067`, `--system-warning`
+4.49:1 → `#886B1F`). Also explicitly endorsed: reversing my own false
+positive on the hairline border rather than "fixing" something WCAG 1.4.11
+does not require of a decorative divider — the correct call was to report
+the mis-specified check, not to damage the "visible but quiet" quality §3
+requires.
+
+**Numbering note (flagged, not silently reconciled):** the user referred to
+this entry as "#038". The on-disk log's next sequential number is #037,
+which is what is used here — there is no #037 gap to fill and no #036
+duplicate created. Consistent with #022's handling: numbering divergences
+between chat and this file are recorded as observed rather than
+retro-fitted, since this log is append-only and its sequence is the
+authoritative one.
+
+No code accompanies this entry — the milestone it ratifies is commit
+`2b01c10`, already pushed.
+**Status:** Accepted.
