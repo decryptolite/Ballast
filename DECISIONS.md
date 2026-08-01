@@ -1692,3 +1692,97 @@ the specified geometry — verified in served output. MEDIUM on whether it
 *looks* right, especially at 16-32px favicon size, which is exactly where
 this kind of mark most often fails; that needs a human eye.
 **Status:** Accepted. Stages 3-5 not started.
+
+---
+
+### Decision #040 — Visual identity rebuild, STAGE 5 of 5: Arc/Circle
+### attribution using officially-sourced assets
+**Sequencing note:** the user overrode the brief's 1-5 order to 5 → 4 →
+(pause for browser verification) → 3, explicitly so that unverified visual
+work stops compounding, and directed that Stage 3 ship a static hero first
+if time is short. Recorded because it deviates from §8 deliberately.
+
+**Assets are the official files, not recreations.** Downloaded directly from
+`circle.com/pressroom`: `Arc_Logos.zip` (1.71 MB) and `circle-logo-2024.zip`
+(2.02 MB), both HTTP 200. Extracted and copied **byte-identical** into
+`public/brand/` — verified with `cmp`. Nothing was redrawn, recoloured or
+traced, per the Brand Use Policy's "Do not alter, stretch, or modify the
+assets."
+
+**A trap worth recording: `circle-logo-ondark.svg` is not the on-dark logo.**
+Its name strongly implies it is the correct asset for a dark canvas. It is
+actually a **1440x900 artboard containing gradient fills** — a presentation
+mockup, not a logo file. Using it would have rendered a mostly-empty box with
+gradients, on a product whose design system forbids gradients outright. The
+correct asset is `circle-logo-white.svg` (467x120, flat `#FFFFFF`, no style
+block, no gradients). Found by inspecting viewBox and fill declarations
+rather than trusting the filename. Arc's equivalent is `Arc_Logo_White.svg`
+(500x171).
+
+**Aspect ratios are honoured exactly:** each mark renders height-constrained
+with width computed from the file's real intrinsic ratio (Arc 2.924:1,
+Circle 3.892:1), so neither can ever be stretched.
+
+**Clearspace — stated honestly rather than overclaimed.** Circle specifies 2x
+on all sides, where x is defined by their *icon's* internal geometry (one gap
++ one ring). That unit cannot be derived from the full-logo file, so the
+component applies a generous proportional margin (1x the rendered logo height
+on every side) and the code comment states plainly that this approximates the
+stated discipline rather than being verified conformance.
+
+**Attribution is factual, not co-branding:** "Built on [Arc]" and "Powered by
+[Circle] Nanopayments", with real working links to `docs.arc.io` and
+`circle.com`, plus an explicit disclaimer that Ballast is independent and not
+affiliated with or endorsed by Circle — satisfying the policy's requirement
+that use not "suggest an affiliation".
+**Verification:** page 200; both marks serve (2657 b / 10797 b); both links
+present; disclaimer present; `tsc` clean.
+**Confidence:** HIGH on provenance, non-modification, aspect ratios and
+links — all verified against served output and byte comparison. MEDIUM on
+visual placement/scale in the footer, unseen in a browser.
+**Status:** Accepted.
+
+---
+
+### Decision #041 — Visual identity rebuild, STAGE 4 of 5: the assistant as
+### a persistent, anchored presence
+**Built:** `components/dashboard/ballast-presence.tsx`, mounted once in the
+dashboard layout so it is present on every dashboard surface.
+
+**Reconciling the reference image, per §5.** Kept: the feeling of persistent
+ambient presence — available everywhere, not buried in a menu. Discarded
+entirely: gradient tiles, bubble avatars, floating-orb chat-widget language,
+and any "AI assistant" iconography. The indicator **is the Ballast mark
+itself** — the same weighted circle as the wordmark — so the assistant's
+presence is expressed in the product's own visual language rather than in
+borrowed chatbot vocabulary. Verified: zero occurrences of
+avatar/chatbot/gradient markup in the served page.
+
+**Anchored, not floating.** Pinned to the bottom-left corner with a hairline
+top and right border and no shadow, so it reads as part of the page's
+structure rather than a card hovering above it. It does not drift, bounce,
+chase the cursor, or animate in with delight-driven motion. Opening the panel
+uses the same settling unfold as evidence elsewhere; Escape closes it, and
+there is no other global key handling — it must never compete for attention.
+
+**Evidence scoping is preserved exactly, and this is the important part.**
+The presence answers about whichever payment the operator has expanded. The
+row publishes only a `verification_event_id` on a custom event; the panel
+sends only that id and the question to the existing
+`/api/ballast/ask` route. **No evidence, state, confidence or conclusion
+crosses that channel** — the route still performs its own scoped retrieval
+and recomputes the inference server-side, so #033's structural guarantee is
+untouched. With no payment in context the panel says so plainly instead of
+silently widening its scope, which would have been the easy and wrong
+shortcut.
+
+**Verification:** page 200 with the presence's aria-label and label text
+present; `tsc` clean; engine (14) and assistant (26) suites unchanged,
+confirming this is presentation-only.
+**Confidence:** HIGH that it renders, is correctly scoped, and adds no new
+trust surface — verified in served output and by the unchanged guardrail
+suite. MEDIUM on its visual weight and whether the corner anchoring feels
+right; and the context-publishing interaction (expand a row → ask) has not
+been exercised in a browser, so its end-to-end behaviour is reasoned rather
+than observed.
+**Status:** Accepted. Stage 3 is the only remaining stage.

@@ -23,7 +23,7 @@
 
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   inferStateV1,
   BREAK_WINDOW_MS,
@@ -133,6 +133,20 @@ export function LedgerRow({
   events: FetchedVerificationEvent[];
 }) {
   const [depth, setDepth] = useState<Depth>("priority");
+
+  // Publish this payment as the assistant's context whenever the row is
+  // expanded, so the persistent presence (§5) answers about what the operator
+  // actually has open. Presentation-only wiring: it carries an id, never
+  // evidence or a conclusion — the route still retrieves and derives
+  // everything server-side (DECISIONS.md #033).
+  useEffect(() => {
+    if (depth === "priority") return;
+    window.dispatchEvent(
+      new CustomEvent("ballast:payment-context", {
+        detail: { verificationEventId: event.id },
+      }),
+    );
+  }, [depth, event.id]);
 
   // Timeline Replay (§7): null = live. When set, it is always the exact
   // observed_at of a real recorded evidence point — never an interpolated

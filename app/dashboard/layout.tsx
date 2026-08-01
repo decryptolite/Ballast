@@ -21,6 +21,8 @@ import { logout } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { TopBarGatewayControls } from "@/components/dashboard/top-bar-gateway-controls";
 import { BallastWordmark } from "@/components/brand/ballast-mark";
+import { Attribution } from "@/components/brand/attribution";
+import { BallastPresence } from "@/components/dashboard/ballast-presence";
 import { LogOut } from "lucide-react";
 
 export default function DashboardLayout({
@@ -49,7 +51,17 @@ export default function DashboardLayout({
           </form>
         </div>
       </header>
-      <main className="flex-1 p-6">{children}</main>
+      <main className="flex-1 p-6">
+        {children}
+        {/* Factual attribution using the official marks (§6). */}
+        <div className="mx-auto" style={{ maxWidth: 1120 }}>
+          <Attribution />
+        </div>
+      </main>
+      {/* Persistent, anchored presence (§5) — present on every dashboard
+          surface, wrapping the existing guardrail-verified Ask Ballast
+          pipeline. */}
+      <BallastPresence />
     </div>
   );
 }
