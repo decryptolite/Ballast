@@ -12,25 +12,65 @@
 
 import type { CSSProperties } from "react";
 
-/** §3 Color System. Every value resolves to a custom property in globals.css. */
+/**
+ * Color. Every value resolves to a custom property in globals.css, whose
+ * hexes were derived by solving for contrast targets and verified on every
+ * surface (DECISIONS.md #038).
+ *
+ * Role-based names: the identity rebuild inverted the canvas from light to
+ * dark, so the previous `paper`/`ink` names would now be actively
+ * misleading. `paper`/`ink` are retained below as deprecated aliases mapping
+ * to the same ROLES, so existing markup keeps working.
+ */
 export const color = {
-  paper: "var(--paper)",
-  paperRaised: "var(--paper-raised)",
-  ink: "var(--ink)",
-  inkSecondary: "var(--ink-secondary)",
-  inkTertiary: "var(--ink-tertiary)",
-  border: "var(--border-hairline)",
-  borderStrong: "var(--border-strong)",
-  /** Payment-state colors — §16: never used outside a state badge or its
+  /** Page canvas — deep warm graphite, never pure black. */
+  canvas: "var(--canvas)",
+  /** Panels and ledger rows. */
+  surface: "var(--surface)",
+  /** Nested/elevated surface. Depth by tone, never by shadow. */
+  surfaceRaised: "var(--surface-raised)",
+
+  textPrimary: "var(--text-primary)",
+  textSecondary: "var(--text-secondary)",
+  textTertiary: "var(--text-tertiary)",
+
+  /** Hairline — the same stroke the wordmark's equilibrium line uses. */
+  line: "var(--line)",
+  lineStrong: "var(--line-strong)",
+
+  /**
+   * The single accent. Carried by luminance, not a new hue, so that hue
+   * stays reserved exclusively for payment state.
+   */
+  accent: "var(--accent-bone)",
+
+  /** Payment state — never used outside a state badge or its
    * directly-associated row accent. */
   break: "var(--break)",
   breakSurface: "var(--break-surface)",
   floating: "var(--floating)",
   reconciled: "var(--reconciled)",
-  /** System-level UI feedback ONLY — never payment lifecycle state (§3). */
+
+  /** System-level UI chrome ONLY — never payment lifecycle state. */
   systemWarning: "var(--system-warning)",
   systemError: "var(--system-error)",
   systemSuccess: "var(--system-success)",
+
+  // --- Deprecated aliases (pre-rebuild names, same roles) ---
+  /** @deprecated use `canvas` */
+  paper: "var(--canvas)",
+  /** @deprecated use `surface` */
+  paperRaised: "var(--surface)",
+  /** @deprecated use `textPrimary` */
+  ink: "var(--text-primary)",
+  /** @deprecated use `textSecondary` */
+  inkSecondary: "var(--text-secondary)",
+  /** @deprecated use `textTertiary` */
+  inkTertiary: "var(--text-tertiary)",
+  /** @deprecated use `line` */
+  border: "var(--line)",
+  /** @deprecated use `lineStrong` */
+  borderStrong: "var(--line-strong)",
 } as const;
 
 /** §4 Typography families. Loaded via next/font in app/layout.tsx. */
@@ -133,10 +173,11 @@ export const text = {
  * exactly the surface area the philosophy says to refuse.
  */
 export const button = {
+  /** Accent fill, canvas label — light on dark, sharp, never a pill. */
   primary: {
     ...text.ui,
-    color: color.paper,
-    background: color.ink,
+    color: color.canvas,
+    background: color.accent,
     border: "none",
     borderRadius: radius,
     padding: "8px 16px",
@@ -144,7 +185,7 @@ export const button = {
   },
   ghost: {
     ...text.ui,
-    color: color.ink,
+    color: color.textPrimary,
     background: "none",
     border: "none",
     borderRadius: 0,
@@ -180,11 +221,11 @@ export const evidenceLine = {
   tag: {
     ...text.data,
     fontSize: 13,
-    color: color.inkTertiary,
+    color: color.textTertiary,
   },
   detail: {
     ...text.body,
     fontSize: 14,
-    color: color.inkSecondary,
+    color: color.textSecondary,
   },
 } satisfies Record<string, CSSProperties>;

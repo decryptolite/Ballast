@@ -1517,3 +1517,126 @@ authoritative one.
 No code accompanies this entry — the milestone it ratifies is commit
 `2b01c10`, already pushed.
 **Status:** Accepted.
+
+---
+
+### Decision #038 — Visual identity rebuild, STAGE 1 of 5: token system
+### rebuilt on a dark canvas; the old palette provably broke the locked
+### asymmetry, not merely the contrast floor
+**Scope:** `BALLAST_VISUAL_IDENTITY_REBUILD.md` (persisted to the repo from
+the brief) authorizes a full visual reinvention and supersedes the prior
+"calm/quiet, never ambitious" aesthetic tone where they conflict. Engine,
+evidence model, guardrails and the asymmetric state rule are unchanged.
+Stage 1 is the token system only; Stages 2-5 (wordmark, landing page,
+assistant indicator, Arc/Circle attribution) are deliberately not started —
+the brief's §8 requires staged reporting.
+
+**The finding that justified the rebuild, measured before any change.**
+Rather than assume the light palette needed replacing, its existing hexes
+were measured against the proposed dark canvas. They did not merely dip
+below the contrast floor — **they inverted the product's single most
+important locked rule.** On `#121210`: BREAK `#A3352B` = 2.77:1 while
+FLOATING `#A8874A` = 5.56:1. Carried over unchanged, BREAK — which must own
+the strongest signal — would have rendered **quieter than FLOATING**, with
+RECONCILED (4.60:1) also louder than BREAK. Reusing the old values on a
+dark base would have silently destroyed the asymmetry the philosophy calls
+non-negotiable.
+
+**Every new value is derived, not chosen by eye.** Each state colour keeps
+its hue identity; lightness was solved numerically for a contrast target
+against `--surface-raised` (the *lightest* surface, i.e. the worst case on a
+dark canvas), so every darker surface passes automatically. Verified on all
+three surfaces:
+
+| token | hex | canvas | surface | raised |
+|---|---|---|---|---|
+| BREAK | `#EE7765` | 6.66 | 6.20 | 5.60 |
+| FLOATING | `#AF8947` | 5.80 | 5.39 | 4.87 |
+| RECONCILED | `#799176` | 5.47 | 5.09 | 4.60 |
+| text-primary | `#F2F0E9` | 16.45 | 15.30 | 13.82 |
+| text-secondary | `#B5B1A5` | 8.75 | 8.14 | 7.35 |
+| text-tertiary | `#918C7C` | 5.58 | 5.19 | 4.69 |
+| accent (bone) | `#E6DFD0` | 14.14 | 13.15 | 11.88 |
+
+**Every token clears 4.5:1 on every surface** — the small-text bar, applied
+even to badges, since a 14px semibold badge does not qualify for WCAG's
+large-text 3:1 allowance.
+
+**Asymmetry is now carried by two independent channels, not one.** Contrast
+alone compressed the three states into a narrow band. Saturation was made
+to carry it as well: BREAK 80%, FLOATING 42%, RECONCILED 11%. RECONCILED is
+therefore near-achromatic — "success should nearly disappear" is expressed
+structurally, not just by dimming. Ordering holds on both channels
+simultaneously, at worst case: 5.60 > 4.87 > 4.60 and 80% > 42% > 11%.
+
+**Accent chosen by what it communicates, per the brief's instruction.** A
+single bone accent `#E6DFD0`, carried by **luminance rather than a new
+hue**. Reasoning: on a dark canvas light is the scarce resource, so
+spending it is what "this matters" means; and keeping the accent
+achromatic-warm leaves **hue reserved exclusively for payment state**,
+preserving the locked "colour never appears outside state communication"
+principle that a chromatic brand accent would have violated. Used only for
+focus rings, primary-button fill, and (Stage 2) the wordmark's equilibrium
+line.
+
+**System tones deliberately desaturated (32-36%) against BREAK's 80%**, so
+a form error can never be mistaken for a payment BREAK — the same
+anti-dilution rule as the light palette, re-derived for the dark one.
+
+**A real bug caught by verifying the served CSS rather than trusting the
+source.** The Ballast accent was first named `--accent`, which collides
+with the shadcn theme block's own `--accent` HSL triple defined later in
+the same file. The collision **silently clobbered the bone accent** — it
+appeared zero times in the served stylesheet, which would have broken every
+focus ring and primary button. Renamed `--accent-bone`. This is the same
+collision class already avoided for `--border` (named `--border-hairline`);
+I applied that reasoning to one token and missed it on the other. Found
+only because the served CSS was inspected, not assumed.
+
+**Motion re-expressed for "physics, not objects."** The unfold now eases on
+a decelerating curve with a 2px settle (240ms) so evidence *settles into
+place* rather than snapping — believable inertia, per the brief's governing
+idea. A `.blst-break` class explicitly disables all animation and
+transition, because BREAK must remain abrupt. `prefers-reduced-motion`
+still collapses everything to instant.
+
+**Naming migrated to roles, with compatibility.** `paper`/`ink` would be
+actively misleading on a dark canvas, so the token module now exposes
+`canvas`/`surface`/`surfaceRaised`/`textPrimary`/`textSecondary`/
+`textTertiary`/`line`/`accent`, with the old names retained as
+`@deprecated` aliases mapping to the same roles so existing markup keeps
+working and can be migrated incrementally.
+
+**Font hosting was broken and is now genuinely fixed — this corrects a
+claim made in #036.** #036 reported IBM Plex as "genuinely loaded, closing
+the #023 gap," verified by 41 `@font-face` rules in the served CSS. That
+observation was real but the conclusion was wrong: `next/font/google`
+downloads the binaries from **fonts.gstatic.com at build time**, and that
+host is unreachable from this environment. The build had only succeeded
+because the binaries were already cached in `.next` from an earlier moment
+when the network allowed it — it was never reproducible, and any fresh
+clone or CI build would have failed. This surfaced when clearing `.next`
+during Stage 1 verification: the app immediately returned **HTTP 500** with
+`Error while requesting https://fonts.gstatic.com/...`. Measured precisely:
+`fonts.googleapis.com` responds 200, `fonts.gstatic.com` times out, other
+hosts are fine — so it is that one host, not general connectivity.
+**Fix:** replaced `next/font/google` with `@fontsource/ibm-plex-{serif,sans,
+mono}`, which ship the woff2 binaries inside `node_modules`. The build now
+depends only on the package registry, and the font-family CSS variables are
+declared in `globals.css` with system fallbacks. Verified by a clean
+rebuild from an emptied `.next`: page returns 200, 38 `@font-face`
+declarations served, zero gstatic requests. The #023/#036 "Plex is bundled"
+claim is only now actually true.
+
+**Verification:** clean rebuild from an emptied `.next` returns HTTP 200
+with the focus ring correctly resolving to `--accent-bone`; `tsc --noEmit`
+clean; engine (14) and assistant (26) tests unchanged, confirming this is
+genuinely presentation-only. All 12 identity tokens confirmed present in
+the served CSS after the rename.
+**Confidence:** HIGH on the derivation, the measurements, the asymmetry
+inversion finding, and the accent-collision fix — all verified numerically
+or against the served stylesheet. MEDIUM on the aggregate visual result,
+which has not been seen in a browser (standing sandbox constraint) — a dark
+canvas is a large perceptual change and warrants a human look before
+Stage 2 builds on top of it.
+**Status:** Accepted. Stages 2-5 not started, pending review of Stage 1.

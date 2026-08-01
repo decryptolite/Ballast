@@ -17,9 +17,26 @@
  */
 
 import type { Metadata } from "next";
-import { IBM_Plex_Serif, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "sonner";
+
+// IBM Plex, self-hosted from npm (@fontsource) rather than next/font/google.
+//
+// next/font/google downloads the binaries from fonts.gstatic.com AT BUILD
+// TIME. That host is unreachable from this environment (fonts.googleapis.com
+// resolves, gstatic times out), so a clean build fails outright with a 500 —
+// verified by clearing .next and rebuilding. The earlier build only appeared
+// to succeed because the binaries were already cached in .next from a build
+// made when the network allowed it; it was never reproducible. @fontsource
+// ships the woff2 files inside node_modules, so the build depends on nothing
+// but the package registry. See DECISIONS.md #038.
+import "@fontsource/ibm-plex-serif/400.css";
+import "@fontsource/ibm-plex-serif/600.css";
+import "@fontsource/ibm-plex-sans/400.css";
+import "@fontsource/ibm-plex-sans/500.css";
+import "@fontsource/ibm-plex-sans/600.css";
+import "@fontsource/ibm-plex-mono/400.css";
+import "@fontsource/ibm-plex-mono/500.css";
 import "./globals.css";
 
 const defaultUrl = process.env.VERCEL_URL
@@ -32,33 +49,6 @@ export const metadata: Metadata = {
   description: "Arc nanopayments demo application",
 };
 
-// BALLAST_DESIGN_SYSTEM.md §4: the IBM Plex superfamily — one type system
-// across three optical purposes. Self-hosted by next/font (no runtime request
-// to Google), which also closes the "Plex not bundled" gap flagged in
-// DECISIONS.md #023. Geist was previously loaded here and is removed: a
-// generic modern sans is precisely what DESIGN_PHILOSOPHY.md's "not Inter as
-// the sole typeface" prohibition is about.
-const plexSerif = IBM_Plex_Serif({
-  variable: "--font-plex-serif",
-  display: "swap",
-  subsets: ["latin"],
-  weight: ["400", "600"],
-});
-
-const plexSans = IBM_Plex_Sans({
-  variable: "--font-plex-sans",
-  display: "swap",
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-});
-
-const plexMono = IBM_Plex_Mono({
-  variable: "--font-plex-mono",
-  display: "swap",
-  subsets: ["latin"],
-  weight: ["400", "500"],
-});
-
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -66,9 +56,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body
-        className={`${plexSerif.variable} ${plexSans.variable} ${plexMono.variable} antialiased`}
-      >
+      <body className="antialiased">
         <TooltipProvider>{children}</TooltipProvider>
         <Toaster richColors position="bottom-right" />
       </body>
