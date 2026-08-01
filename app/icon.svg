@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="32" height="32">
+  <!--
+    Ballast favicon — the mark alone (BALLAST_VISUAL_IDENTITY_REBUILD.md §2).
+    Simplified for legibility at 16-32px: the stroke is 1.5 viewBox units
+    rather than a true hairline, because a 1px hairline disappears at favicon
+    size. Geometry is otherwise identical to components/brand/ballast-mark.tsx.
+    Colours are explicit (a favicon has no inherited currentColor): bone
+    accent on the canvas tone.
+  -->
+  <defs>
+    <clipPath id="lower">
+      <rect x="0" y="14" width="24" height="10" />
+    </clipPath>
+  </defs>
+  <rect width="24" height="24" rx="2" fill="#121210" />
+  <circle cx="12" cy="12" r="9" fill="#e6dfd0" clip-path="url(#lower)" />
+  <circle cx="12" cy="12" r="9" fill="none" stroke="#e6dfd0" stroke-width="1.5" />
+  <line x1="1.5" y1="14" x2="22.5" y2="14" stroke="#e6dfd0" stroke-width="1.5" />
+</svg>

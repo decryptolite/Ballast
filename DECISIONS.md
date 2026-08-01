@@ -1640,3 +1640,55 @@ which has not been seen in a browser (standing sandbox constraint) — a dark
 canvas is a large perceptual change and warrants a human look before
 Stage 2 builds on top of it.
 **Status:** Accepted. Stages 2-5 not started, pending review of Stage 1.
+
+---
+
+### Decision #039 — Visual identity rebuild, STAGE 2 of 5: the mark
+**Built:** `components/brand/ballast-mark.tsx` exporting `BallastMark` (the
+mark alone) and `BallastWordmark` (mark + "Ballast" in the serif voice),
+plus `app/icon.svg` as the favicon, with the wordmark placed in the
+dashboard nav linking to `/dashboard/observe`.
+
+**Geometry, per §2:** a circle, mostly open, weighted low — the lower
+portion solid, the upper an outline only, crossed by a single hairline
+equilibrium line where fill meets openness. It depicts a physical property
+(mass sitting low is what makes a body stable) rather than an object. No
+ballast weight, anchor, ship or water appears at any size.
+
+**Three implementation decisions worth recording:**
+1. **The filled segment is produced by clipping a full circle, not by an
+   arc path.** Arc sweep/large-arc flags are easy to get subtly wrong and
+   essentially impossible to verify without a browser — which this
+   environment does not have. A clipped rectangle is geometrically
+   unambiguous and renders identically everywhere. Chosen for verifiability
+   under a known constraint, not for elegance.
+2. **`vectorEffect="non-scaling-stroke"`** on the outline and equilibrium
+   line, so both render as a true 1px hairline at any size. This is what
+   makes the brief's "the mark and the interface share literal visual DNA"
+   true in fact rather than by intention: it is the same 1px the dividers
+   use, not a stroke that merely looks similar at one size.
+3. **A single shared `clipPath` id is safe here** because the viewBox is
+   fixed at 24x24 and never varies with `size` — every instance defines
+   identical clip geometry, so duplicate ids resolve to the same correct
+   shape. This avoids needing `useId()`, which would have forced the mark
+   to become a client component for no behavioural reason.
+
+**Favicon deliberately diverges from the component:** `app/icon.svg` uses a
+1.5-unit stroke rather than a true hairline, because a 1px hairline
+disappears at 16px. §2 explicitly permits simplification for small sizes.
+Colours are explicit (bone on canvas) since a standalone favicon has no
+inherited `currentColor`.
+
+**Clearspace is enforced by the component**, not left to callers: the
+mark-to-word gap is 0.5x and the surrounding padding 0.5x/1x of the mark
+size, so the discipline holds at any scale — the same posture §6 requires
+of Circle's marks.
+
+**Verification:** `tsc --noEmit` clean; page returns 200 with the mark's
+clip id, the wordmark text and the nav link's aria-label all present in the
+served HTML; `/icon.svg` serves 200.
+**Confidence:** HIGH that the mark renders, is correctly wired, and matches
+the specified geometry — verified in served output. MEDIUM on whether it
+*looks* right, especially at 16-32px favicon size, which is exactly where
+this kind of mark most often fails; that needs a human eye.
+**Status:** Accepted. Stages 3-5 not started.

@@ -16,9 +16,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import Link from "next/link";
 import { logout } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { TopBarGatewayControls } from "@/components/dashboard/top-bar-gateway-controls";
+import { BallastWordmark } from "@/components/brand/ballast-mark";
 import { LogOut } from "lucide-react";
 
 export default function DashboardLayout({
@@ -30,6 +32,15 @@ export default function DashboardLayout({
     <div className="min-h-screen flex flex-col">
       <header className="border-b">
         <div className="flex items-center justify-between gap-3 px-4 py-3 sm:px-6">
+          {/* The mark sits first, with its own clearspace (§2). It links to
+              the observability screen — the product's actual home. */}
+          <Link
+            href="/dashboard/observe"
+            aria-label="Ballast — observability"
+            className="blst-ghost shrink-0"
+          >
+            <BallastWordmark size={20} />
+          </Link>
           <TopBarGatewayControls />
           <form action={logout}>
             <Button variant="ghost" size="icon" type="submit">
