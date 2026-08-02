@@ -1786,3 +1786,75 @@ right; and the context-publishing interaction (expand a row → ask) has not
 been exercised in a browser, so its end-to-end behaviour is reasoned rather
 than observed.
 **Status:** Accepted. Stage 3 is the only remaining stage.
+
+---
+
+### Decision #042 — Visual identity rebuild, STAGE 3 of 5 (final): static
+### landing page at /welcome; rebuild complete
+**Built:** `app/welcome/page.tsx` and
+`components/brand/settling-figure.tsx`. Static by decision, per the
+deadline call: a complete static page beats an untested animated one, and
+the settling motion can be layered on later without restructuring anything.
+
+**Routing — zero risk to the working auth flow, as instructed.** The page
+lives at `/welcome`, not `/`, and `proxy.ts` was not touched. Verified from
+the matcher itself (`["/", "/dashboard/:path*"]`) that `/welcome` falls
+outside it, then confirmed at runtime: `/welcome` returns 200 **with no
+session cookie**, while `/` with a cookie still returns 307 to the
+dashboard exactly as before. The redirect that would have hidden a landing
+page at `/` is untouched and irrelevant here.
+
+**"Noise becoming order" expressed statically.** §4's hero concept is
+scattered points settling under gravity into an ordered arrangement. The
+static translation shows that transformation over SPACE rather than TIME:
+five bands descending, horizontal scatter and vertical jitter decaying to
+zero while opacity and radius rise, resolving onto the same hairline
+equilibrium line the mark uses. Same mechanism, no motion, nothing
+depending on an animation landing correctly. Point positions are
+**deterministic** — hashed from an index at module scope, never
+`Math.random()` — so server and client markup match (no hydration mismatch)
+and the composition is stable across builds. No maritime imagery: points
+finding rest, not droplets or waves.
+
+**Copy is product vocabulary, not marketing.** Every claim is one the
+system can defend, and the evidence terms are lifted verbatim from the
+engine: `pending_batch_sum_attributed`,
+`pending_batch_cleared_after_rise`, `onchain_withdrawal_observed`,
+`insufficient_observation_coverage`, and the real state names. **No
+fabricated metrics** — no customer counts, no volume figures, no uptime
+claims. The page states the RECONCILED cap and the absence of per-payment
+onchain proof as prominently as anything else, which is the opposite of how
+a fintech landing page usually behaves, and is the point.
+
+**Structure is four "movements", not feature blocks** (§4): each poses one
+question and answers it before handing to the next — what is invisible,
+what can honestly be observed, what it refuses to claim, why anyone would
+believe it — separated by hairlines rather than card edges. Stages 1, 2 and
+5 were reused unchanged: tokens, `BallastWordmark`, `Attribution`. No
+redesign of any of them.
+
+**Final verification pass (all green):**
+- `npm run build` → **exit 0**; `/welcome` and `/icon.svg` both prerendered
+  static in the route table.
+- `tsc --noEmit` → clean.
+- Engine **14/14**, assistant **26/26** — unchanged, confirming the whole
+  five-stage rebuild remained presentation-only.
+- Runtime: `/welcome` 200 unauthenticated; `/dashboard/observe` 200
+  authenticated; `/` 307 with cookie (proxy unchanged); `/icon.svg` 200.
+- Served HTML: 110 figure points + 2 mark circles; all six product
+  vocabulary terms present; **zero** occurrences of `linear-gradient`,
+  `radial-gradient`, `backdrop-filter`, "Powered by AI", or pill radii.
+
+**One pre-existing warning, correctly attributed rather than claimed as
+mine:** the build logs `HANGING_PROMISE_REJECTION` for
+`/api/gateway/balance` (a `fetch()` during prerender). That route was last
+modified in `a29f920` — the fork's initial commit — and was never touched
+by any stage of this work. It does not fail the build (exit 0). Flagged as
+inherited, not introduced.
+**Confidence:** HIGH that the page builds, serves publicly, reuses the
+prior stages correctly, contains no fabricated data, and breaks no existing
+behaviour — all verified against a production build and live responses.
+MEDIUM on whether it *looks* right, and on the settling figure's visual
+balance in particular, which no amount of markup inspection can establish.
+**Status:** Accepted. All five stages of the visual identity rebuild are
+built; browser verification of the whole set remains outstanding.
