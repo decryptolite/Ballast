@@ -1858,3 +1858,89 @@ MEDIUM on whether it *looks* right, and on the settling figure's visual
 balance in particular, which no amount of markup inspection can establish.
 **Status:** Accepted. All five stages of the visual identity rebuild are
 built; browser verification of the whole set remains outstanding.
+
+---
+
+### Decision #043 — Submission state of the project (read this one first)
+**Purpose:** the single entry that describes what exists and what does not,
+so the state can be understood without reading the preceding log.
+
+**What Ballast is:** a deterministic, evidence-based reconciliation
+instrument for Circle Nanopayments on Arc. It observes real payments moving
+VERIFIED → FLOATING → RECONCILED (with BREAK and
+`insufficient_observation_coverage` as honest exception states) and produces
+replayable, confidence-scored, evidence-attached conclusions. It exists
+because per-payment onchain settlement proof does not exist in Circle's
+architecture (#008), and it is explicit about that rather than papering
+over it.
+
+**Built and verified:**
+- *Evidence plane* — `verification_events` and `chain_observations`,
+  append-only, enforced by explicit `REVOKE UPDATE, DELETE` rather than RLS
+  omission alone (#009). Chain observer runs independently of the payment
+  flow (#011).
+- *Inference plane* — `inferStateV1`: pure, versioned, no clock read, no
+  I/O. `pendingBatch` discovered empirically to be an exact running
+  accumulator, which enabled arithmetic attribution rather than mere timing
+  correlation (#012).
+- *Presentation plane* — `/dashboard/observe` ledger with four-depth
+  expansion (#023), Operational State on an independent query (#021),
+  Timeline Replay over real evidence points (#025), Audit Export (#032),
+  BREAK remediation with human-action records type-separated from system
+  evidence (#030), Evidence Assistant with structural + validation
+  guardrails (#033) on Gemini (#035).
+- *Identity* — five-stage visual rebuild: dark token system (#038), mark
+  and favicon (#039), Arc/Circle attribution from official assets (#040),
+  persistent assistant presence (#041), static landing page at `/welcome`
+  (#042).
+
+**Test counts at submission:** engine **14/14**, assistant guardrails
+**26/26**. `tsc --noEmit` clean. `npm run build` exit 0.
+
+**Routes confirmed working** (production build, live requests):
+
+| route | no session | with session |
+|---|---|---|
+| `/` | 200 (sign-in) | 307 → dashboard |
+| `/welcome` | 200 | 200 |
+| `/dashboard` | 307 → sign-in | 200 |
+| `/dashboard/observe` | 307 → sign-in | 200 |
+| `/icon.svg` | 200 | 200 |
+| `/api/ballast/ask` | 401 | 200 |
+| `/api/ballast/remediation` | 401 | 400 on invalid action, no write |
+| `/api/gateway/balance` | 200 | 200 |
+
+**Known non-blocking issues, stated rather than hidden:**
+1. **Browser verification of the visual rebuild is outstanding.** Every
+   visual claim in #038-#042 is MEDIUM confidence: verified in served
+   markup and by measurement, never seen rendered. This is the single
+   largest gap and only a human can close it.
+2. **`HANGING_PROMISE_REJECTION` on `/api/gateway/balance`** — inherited
+   from the fork's initial commit (`a29f920`), never modified by this work.
+   It does not fail the build, and it proved **intermittent**: present in
+   one build, absent in the next, since it depends on whether a build-time
+   network call happens to hang. An attempt to silence it with
+   `export const dynamic = "force-dynamic"` **broke the build outright**
+   (Turbopack, exit 1) and was reverted to a byte-identical copy of the
+   inherited file, with the build confirmed back at exit 0. Left alone
+   deliberately: the fix costs more than the warning.
+3. **Remediation happy-path insert never exercised** (#031) — no payment
+   has ever genuinely required attention, and fabricating one would put a
+   false human-action record in an append-only log. Guardrails (401/400)
+   are verified; the 201 path is not.
+4. **OpenAI provider path unexercised** — Gemini is live and verified
+   (#035); the OpenAI implementation has never run.
+5. **`/api/*` routes are not covered by `proxy.ts`** (its matcher is
+   `["/", "/dashboard/:path*"]`). Ballast's own routes gate themselves on
+   the session cookie and return 401; the inherited fork routes do not.
+   Pre-existing, not introduced here, and not changed before a deadline.
+6. **Demo credentials** (`admin@example.com`/`123456`) are inherited from
+   the fork and explicitly not production-appropriate (#016).
+
+**Repo hygiene at submission:** `.env.local` is untracked, git-ignored, and
+was never committed at any point in history. Working tree clean, everything
+pushed to `origin/master`. All governance and spec documents present and
+tracked: CLAUDE.md, DECISIONS.md, PARKING_LOT.md, DESIGN_PHILOSOPHY.md,
+BALLAST_MASTER_SPEC.md, BALLAST_DESIGN_SYSTEM.md,
+BALLAST_VISUAL_IDENTITY_REBUILD.md.
+**Status:** Accepted. No further feature or design work planned.
