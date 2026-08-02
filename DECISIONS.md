@@ -1944,3 +1944,70 @@ tracked: CLAUDE.md, DECISIONS.md, PARKING_LOT.md, DESIGN_PHILOSOPHY.md,
 BALLAST_MASTER_SPEC.md, BALLAST_DESIGN_SYSTEM.md,
 BALLAST_VISUAL_IDENTITY_REBUILD.md.
 **Status:** Accepted. No further feature or design work planned.
+
+---
+
+### Decision #044 — Deployment blocker: Supabase clients constructed at
+### module scope failed Vercel's build; moved into request handlers
+**Problem (genuine deployment blocker, not the previously-noted warning):**
+Vercel imports route modules during its build-time "collect page data"
+step, where `NEXT_PUBLIC_SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` are
+not necessarily present. Any `createClient(...)` evaluated at module scope
+therefore threw during import and failed the deployment build. This is
+distinct from — and more serious than — the intermittent
+`HANGING_PROMISE_REJECTION` recorded in #043, which never failed a build.
+
+**Two files were affected, not one.** The reported file plus one the report
+did not mention:
+1. `app/api/gateway/withdraw/route.ts` — module-scope client, 3 usage sites.
+2. **`lib/x402.ts`** — module-scope client, 2 usage sites. This is the more
+   serious of the two: the module is imported by all four
+   `/api/premium/*` routes, so a single top-level `createClient()` failed
+   **five** routes at build time, not one.
+
+**Audited every other construction site** rather than fixing only what was
+reported. `app/api/ballast/{ask,remediation}/route.ts`,
+`lib/supabase/proxy.ts`, `lib/supabase/{client,server}.ts`, all hooks and
+components already construct inside a function or handler and were left
+untouched. `app/api/gateway/balance/route.ts` builds a viem
+`createPublicClient` at module scope but from a **hardcoded** RPC URL with
+no env vars, so it cannot throw on missing configuration — deliberately not
+changed, especially given that file already broke the build once (#043).
+
+**Fix:** the `createClient(...)` call moved inside the request handler in
+both files. Same client, same configuration, same keys — only the moment of
+construction changed, exactly as scoped.
+
+**A wrong turn worth recording.** The first attempt memoised the client
+behind a module-scope `let supabaseClient: ReturnType<typeof createClient>`
+so there would still be one instance per process. That **broke the
+types**: naming the client's type through a variable annotation loses the
+call-site generic inference, collapsing `.from(...).insert(...)` arguments
+to `never` (8 errors across both files). Introducing a factory and using
+`ReturnType<typeof makeSupabase>` did not fix it either. Abandoned in
+favour of plain per-request construction — which is what the instruction
+actually specified, and is the pattern the already-working
+`/api/ballast/*` routes use. The cost is one client object per request
+instead of one per process; construction is local object setup with no
+network, and correctness beat the micro-optimisation.
+
+**A second near-miss:** an initial `grep 'supabase\.'` found only one usage
+in each file, because the others are written as `await supabase` with
+`.from()` on the following line. Grepping `await supabase` surfaced two
+more — including `lib/x402.ts`'s `verification_events` write, the evidence
+log's own insertion point. Had that been missed the file would not have
+compiled.
+
+**Verification:** `tsc --noEmit` exit 0; engine **14/14**; assistant
+**26/26**; `npm run build` **exit 0**. Runtime smoke test against the
+production server: `/api/premium/{quote,dataset,agent-task}` → 402,
+`/api/premium/compute` → 402 on POST (405 on GET is correct; it is
+POST-only), `/api/gateway/withdraw` → 400 on an empty body (proving the
+handler runs and the client constructs), `/welcome` 200,
+`/dashboard/observe` 200, `/api/gateway/balance` 200, and zero
+client-construction errors in the server log.
+**Confidence:** HIGH that the blocker is resolved — the failing pattern no
+longer exists anywhere in the codebase, and every affected route was
+exercised at runtime. The Vercel build itself has not been re-run from
+here; that confirmation belongs to the next deploy.
+**Status:** Accepted.

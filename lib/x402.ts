@@ -29,10 +29,14 @@ export const sellerAddress = process.env.SELLER_ADDRESS as `0x${string}`;
 
 const facilitator = new BatchFacilitatorClient();
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+// NOTE: the Supabase client is deliberately NOT constructed here at module
+// scope. This module is imported by all four /api/premium/* routes, so a
+// top-level createClient() was evaluated whenever Vercel imported any of
+// them during its build-time "collect page data" step — where these env vars
+// are not necessarily present — and threw, failing the deployment build.
+// It is now constructed inside the request handler below, the same pattern
+// the /api/ballast/* routes already use. Same client, same configuration,
+// same keys; only the moment of construction changed.
 
 interface PaymentPayload {
   x402Version: number;
@@ -80,6 +84,12 @@ export function withGateway(
   const requirements = buildPaymentRequirements(price);
 
   return async (req: NextRequest) => {
+    // Constructed per request, never at import time — see the note above.
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    );
+
     const paymentSignature = req.headers.get("payment-signature");
 
     // No payment — return 402 with Gateway batching payment requirements

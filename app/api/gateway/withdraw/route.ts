@@ -34,12 +34,20 @@ const SUPPORTED_CHAIN_LABELS: Record<string, string> = {
   polygonAmoy: "Polygon Amoy",
 };
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+// NOTE: the Supabase client is deliberately NOT constructed at module scope.
+// Vercel imports route modules during its build-time "collect page data"
+// step, where these env vars are not necessarily present — a top-level
+// createClient() therefore threw and failed the deployment build. It is now
+// constructed inside the handler, the same pattern the /api/ballast/* routes
+// already use. Same client, same configuration, same keys; only the moment
+// of construction changed.
 
 export async function POST(req: NextRequest) {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+
   const privateKey = process.env.SELLER_PRIVATE_KEY;
   if (!privateKey) {
     return NextResponse.json(
