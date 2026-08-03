@@ -91,6 +91,7 @@ export default function SignIn() {
                 name="email"
                 type="email"
                 placeholder="Email"
+                defaultValue={DEMO_EMAIL}
                 required
               />
             </div>
@@ -101,6 +102,7 @@ export default function SignIn() {
                 name="password"
                 type="password"
                 placeholder="Password"
+                defaultValue={DEMO_PASSWORD}
                 required
               />
             </div>

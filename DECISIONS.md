@@ -2188,3 +2188,51 @@ both present).
 — both verified directly against the running app and the live database.
 MEDIUM only on the credential panel's visual placement, unseen in a browser.
 **Status:** Accepted. Steps 2 and 3 not started.
+
+---
+
+### Decision #048 — First-time-visitor gap, STEP 2 of 3: sign-in fields
+### autofilled; migration confirmed live with real requests
+**Confirmation of the migration applied after #047:** ran the real payment
+agent against real endpoints (7 requests, real EIP-3009 signatures, real
+Circle settlement, $0.0526 spent) and confirmed **7 new rows landed in
+`payment_events`**, matching exactly — the previously-silent insert flagged
+in #047 now succeeds on every real request.
+
+Withdraw was more subtle. `POST /api/gateway/withdraw` returned 400, not
+500 — but that 400 fires at the route's FIRST pre-check (seller wallet
+native-gas balance), which returns before the code ever reaches the
+`withdrawals` insert, so it didn't actually exercise the thing that broke.
+Verified the insert directly instead: wrote a labeled test row in the exact
+shape the route inserts, confirmed success, deleted it immediately —
+table left exactly as found. Independently confirmed via RPC (not just the
+app's own error text) that the seller wallet genuinely holds 0 native gas
+on Arc Testnet — a real, pre-existing, unrelated condition. Not fixed here:
+funding it moves real (testnet) assets, and that felt like the user's call.
+
+**Env vars confirmed by grep against actual code, not memory:** all five —
+`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`,
+`SUPABASE_SERVICE_ROLE_KEY`, `SELLER_ADDRESS`, `SELLER_PRIVATE_KEY` — match
+`.env.example` exactly. `BUYER_ADDRESS`/`BUYER_PRIVATE_KEY` do not need to
+be set on the deployment: grep confirms they are read only by local scripts
+(`agent.mts`, `generate-wallets.mts`), never by the deployed app.
+
+**Step 2:** `app/page.tsx`'s email and password `<Input>`s now carry
+`defaultValue={DEMO_EMAIL}` / `defaultValue={DEMO_PASSWORD}` (the same
+constants Step 1 displays — one source, not duplicated literals). Plain
+uncontrolled inputs (no `value`/`onChange` elsewhere in the component), so
+`defaultValue` is the correct mechanism: pre-filled, still editable, and
+`FormData` reads the DOM value on submit regardless. The visible "Demo
+access" text from Step 1 is unchanged — belt and suspenders, not a
+replacement, per instruction. No auth logic touched.
+
+**Verified:** the rendered HTML carries `value="admin@example.com"` and
+`value="123456"` on the two inputs — a visitor can load the page and click
+"Sign in" with zero typing. `tsc` 0, engine **14/14**, assistant **26/26**,
+build exit 0. Full route sweep unchanged: `/`, `/welcome`, `/dashboard`,
+`/dashboard/observe` all correct with and without session.
+**Confidence:** HIGH on the migration confirmation, the insert fix, the env
+var names, and the autofill rendering — all verified directly against the
+running app, the live database, and served HTML. MEDIUM only on visual
+appearance, unseen in a browser.
+**Status:** Accepted. Step 3 not started.
