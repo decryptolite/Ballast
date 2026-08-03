@@ -24,6 +24,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { color, radius, space, text } from "@/lib/ballast/design-tokens";
+
+// Demo credentials, stated plainly so a first-time visitor is never stuck at
+// the door. Informational styling only — the caption voice and a hairline
+// panel, never a warning or error tone: this is a fact about the demo, not a
+// problem. The values are set in sans/mono per the design system's split
+// between interface chrome and literal data.
+const DEMO_EMAIL = "admin@example.com";
+const DEMO_PASSWORD = "123456";
 
 export default function SignIn() {
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +56,31 @@ export default function SignIn() {
           <p className="text-sm text-muted-foreground">
             Enter your credentials to access the dashboard
           </p>
+          <div
+            style={{
+              border: `1px solid ${color.line}`,
+              borderRadius: radius,
+              background: color.surface,
+              padding: space.sm,
+              marginTop: space.sm,
+            }}
+          >
+            <div style={{ ...text.caption, color: color.textTertiary }}>
+              Demo access
+            </div>
+            <div
+              style={{
+                ...text.data,
+                color: color.textPrimary,
+                marginTop: space.xxs,
+                wordBreak: "break-all",
+              }}
+            >
+              email: {DEMO_EMAIL}
+              <br />
+              password: {DEMO_PASSWORD}
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <form action={handleSubmit} className="flex flex-col gap-4">

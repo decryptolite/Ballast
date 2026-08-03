@@ -2129,3 +2129,62 @@ each, and `app/actions.ts` now redirecting to `/dashboard/observe`.
 view — verified in served HTML. MEDIUM only on visual placement within the
 header row, which has not been seen in a browser.
 **Status:** Accepted.
+
+---
+
+### Decision #047 — First-time-visitor gap, STEP 1 of 3: demo credentials
+### stated on the sign-in page; plus a significant unrelated finding
+**Step 1 (this entry):** `app/page.tsx` now shows the demo credentials
+plainly — a "Demo access" panel with `email: admin@example.com` and
+`password: 123456`, set in the caption + mono voices on a hairline panel.
+Informational styling deliberately: `--line`/`--surface`/`--text-tertiary`,
+never `--system-warning` or `--system-error`. This is a fact about the demo,
+not a problem, and colouring it as a warning would misrepresent it. No auth
+logic touched.
+
+**Cross-check after Step 1 — everything still green.** Routes: `/` 200 /
+307-with-session, `/welcome` 200 both, `/dashboard` 307/200,
+`/dashboard/observe` 307/200, `/icon.svg` 200; all four premium routes 402,
+`gateway/balance` 200, `gateway/withdraw` 400 on empty body,
+`ballast/ask` and `ballast/remediation` 401 unauthenticated. Engine
+**14/14**, assistant **26/26**, `tsc` 0, build exit 0. `.env.local`
+untracked, tree clean, pushed.
+
+**SIGNIFICANT FINDING, previously unflagged — the forked demo's tables do
+not exist in the database.** `payment_events` and `withdrawals` return
+"Could not find the table" for **both** the anon key and the service role,
+so this is not an RLS problem: the tables were never created. The fork's own
+migration `supabase/migrations/20260310000000_create_transactions.sql`
+creates them and has simply never been applied to the remote project — the
+same situation as #013 before #016 applied the pending_batch migration.
+
+Consequences a first-time visitor or judge would actually hit:
+1. **`/dashboard` shows empty Payments and Withdrawals tables.** The queries
+   error; the UI renders nothing. Someone clicking "Payments" from the new
+   nav sees a blank demo.
+2. **Withdraw is broken.** `/api/gateway/withdraw` inserts into
+   `withdrawals` before doing anything else, so it returns 500 "Failed to
+   record withdrawal" — it can never succeed.
+3. **`lib/x402.ts`'s `payment_events` insert has been failing silently on
+   every payment.** It is wrapped in its own error branch that only logs, so
+   payments still succeed and Ballast's own evidence log
+   (`verification_events`) is unaffected — which is why this went unnoticed.
+   Ballast's data is intact: 308 verification_events, 547
+   chain_observations.
+
+**Not fixed here** — applying it is DDL, which this environment has no
+credentials for (#013), and it is outside Step 1's scope. Fix is one
+command: apply `20260310000000_create_transactions.sql` via `supabase db
+push` or the dashboard SQL editor. Flagged now rather than at submission.
+
+**Also worth knowing for the deploy:** the runtime env vars the app reads
+are `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`,
+`SUPABASE_SERVICE_ROLE_KEY`, `SELLER_ADDRESS`, `SELLER_PRIVATE_KEY`, and
+optionally `GEMINI_API_KEY`/`GEMINI_MODEL`/`BALLAST_LLM_PROVIDER`. If any of
+the first five are unset on Vercel the corresponding surface fails at
+runtime. Brand assets resolve (`public/brand/{arc,circle}-logo-white.svg`
+both present).
+**Confidence:** HIGH on the Step 1 change and on the missing-tables finding
+— both verified directly against the running app and the live database.
+MEDIUM only on the credential panel's visual placement, unseen in a browser.
+**Status:** Accepted. Steps 2 and 3 not started.
