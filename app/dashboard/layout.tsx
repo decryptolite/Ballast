@@ -23,6 +23,7 @@ import { TopBarGatewayControls } from "@/components/dashboard/top-bar-gateway-co
 import { BallastWordmark } from "@/components/brand/ballast-mark";
 import { Attribution } from "@/components/brand/attribution";
 import { BallastPresence } from "@/components/dashboard/ballast-presence";
+import { PrimaryNav } from "@/components/dashboard/primary-nav";
 import { LogOut } from "lucide-react";
 
 export default function DashboardLayout({
@@ -43,6 +44,9 @@ export default function DashboardLayout({
           >
             <BallastWordmark size={20} />
           </Link>
+          {/* Labeled navigation. The wordmark above links here too, but a
+              logo reads as branding, not as a way to change view. */}
+          <PrimaryNav />
           <TopBarGatewayControls />
           <form action={logout}>
             <Button variant="ghost" size="icon" type="submit">

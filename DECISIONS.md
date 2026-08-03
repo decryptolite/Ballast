@@ -2088,3 +2088,44 @@ failure was reproduced locally and shown to flip with this change alone.
 The remaining uncertainty is only whether Vercel's build environment
 differs from the reproduction in some further way.
 **Status:** Accepted. Supersedes the client placement introduced in #044.
+
+---
+
+### Decision #046 — Navigation gap: Ballast was undiscoverable from the
+### dashboard, and the landing page's call to action dead-ended
+**Problem (found on the live deployment):** a user on `/dashboard` — the
+inherited Circle demo — had no labeled route to `/dashboard/observe`, which
+is the actual product. Worse, the journey from the landing page dead-ended:
+`/welcome`'s call to action correctly points at `/dashboard/observe`, but an
+unauthenticated visitor is redirected to sign in, and `app/actions.ts` then
+sent them to `/dashboard`. A new visitor following the landing page's own
+call to action therefore ended up on the forked payments table, with no
+labeled way onward.
+
+**Not strictly true that no link existed** — the Ballast wordmark in the
+header has linked to `/dashboard/observe` since #039. But a logo reads as
+branding, not as a control that changes view, so in practice the product
+was undiscoverable. The report was right in substance.
+
+**Changes (navigation only; no engine, evidence, or guardrail logic):**
+1. `components/dashboard/primary-nav.tsx` — labeled navigation with
+   "Observability" (`/dashboard/observe`) and "Payments" (`/dashboard`),
+   rendered in the same header row as the wordmark and Gateway controls.
+   The current view is marked by weight plus a hairline accent rule and
+   `aria-current="page"` — never a pill or a fill. Exact path matching, so
+   "Payments" does not light up while on the observability screen.
+2. `app/actions.ts` — post-login redirect changed from `/dashboard` to
+   `/dashboard/observe`, completing the landing-page journey. **This is a
+   deliberate behaviour change to the inherited flow:** signing in now lands
+   on Ballast rather than the demo payments table, which is one labeled
+   click away in the new nav. Flagged rather than made silently, since it
+   alters what an existing user sees on login.
+
+**Verified:** `tsc` 0; engine **14/14**; assistant **26/26**; build exit 0.
+Rendered output confirms the nav appears on both `/dashboard` and
+`/dashboard/observe`, with `aria-current="page"` marking the active view on
+each, and `app/actions.ts` now redirecting to `/dashboard/observe`.
+**Confidence:** HIGH that the links exist, resolve, and mark the active
+view — verified in served HTML. MEDIUM only on visual placement within the
+header row, which has not been seen in a browser.
+**Status:** Accepted.

@@ -41,7 +41,13 @@ export async function login(formData: FormData) {
     maxAge: 60 * 60 * 24, // 1 day
   });
 
-  redirect("/dashboard");
+  // Land on Ballast, not the inherited Circle demo. /welcome's call to
+  // action points at /dashboard/observe; an unauthenticated visitor is sent
+  // here to sign in, and previously landed on /dashboard afterwards — the
+  // forked payments table — with no obvious route onward. Redirecting to the
+  // observability screen completes that journey. The demo views remain one
+  // labeled click away in the header nav.
+  redirect("/dashboard/observe");
 }
 
 export async function logout() {
