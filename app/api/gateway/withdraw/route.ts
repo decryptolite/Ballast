@@ -43,11 +43,6 @@ const SUPPORTED_CHAIN_LABELS: Record<string, string> = {
 // of construction changed.
 
 export async function POST(req: NextRequest) {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  );
-
   const privateKey = process.env.SELLER_PRIVATE_KEY;
   if (!privateKey) {
     return NextResponse.json(
@@ -140,6 +135,14 @@ export async function POST(req: NextRequest) {
       );
     }
   }
+
+  // Constructed here — after `await req.json()` above, so prerendering has
+  // already bailed out and this line is only ever reached with a real
+  // request (and therefore real env). See the note at the top of the file.
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
 
   // Insert a pending withdrawal record
   const { data: withdrawal, error: insertError } = await supabase

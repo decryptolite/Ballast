@@ -84,12 +84,14 @@ export function withGateway(
   const requirements = buildPaymentRequirements(price);
 
   return async (req: NextRequest) => {
-    // Constructed per request, never at import time — see the note above.
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    );
-
+    // Request data is read FIRST, before any client is constructed. With
+    // `cacheComponents: true` (next.config.ts) Next prerenders a route
+    // handler until it touches request data; touching `req` is what marks
+    // the request dynamic and aborts prerendering. Constructing the Supabase
+    // client above this line meant the handler threw "supabaseUrl is
+    // required" during Vercel's build before Next ever reached the bail-out
+    // point. Note that `export const dynamic` is NOT an option here — it is
+    // rejected outright as incompatible with cacheComponents. See #045.
     const paymentSignature = req.headers.get("payment-signature");
 
     // No payment — return 402 with Gateway batching payment requirements
@@ -164,6 +166,13 @@ export function withGateway(
         Number(requirements.amount) / 1e6
       ).toString();
       const payer = settleResult.payer ?? verifyResult.payer ?? "unknown";
+
+      // Constructed here — after the request has already been read, so
+      // prerendering has bailed out long before this line is reachable.
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      );
 
       const { error } = await supabase.from("payment_events").insert({
         endpoint,

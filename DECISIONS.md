@@ -2010,4 +2010,81 @@ client-construction errors in the server log.
 longer exists anywhere in the codebase, and every affected route was
 exercised at runtime. The Vercel build itself has not been re-run from
 here; that confirmation belongs to the next deploy.
-**Status:** Accepted.
+**Status:** Accepted. Superseded in part by #045 — #044's fix moved the
+clients into the handlers but placed them BEFORE the request was read,
+which is what the Vercel build then failed on.
+
+---
+
+### Decision #045 — Vercel prerender failure: `force-dynamic` is impossible
+### here; the real fix is constructing clients AFTER reading the request
+**Problem:** after #044, Vercel still failed — now with
+`supabaseUrl is required` while prerendering `/api/premium/agent-task`,
+even though the client was constructed inside the handler.
+
+**The instructed fix cannot be used, and Next says so explicitly.** Adding
+`export const dynamic = "force-dynamic"` to the seven env-dependent routes
+made the build **worse**: 7 hard errors, each reading
+
+> Route segment config "dynamic" is not compatible with
+> `nextConfig.cacheComponents`. Please remove it.
+
+`next.config.ts` sets `cacheComponents: true`, which rejects the `dynamic`
+segment config outright. This is also the true explanation for the earlier
+failure recorded in #043, where the same directive broke the build on
+`/api/gateway/balance` — that was never about the hanging fetch. All seven
+additions were reverted.
+
+**A reporting correction:** during that failed build I initially counted
+"7 × supabaseUrl is required" and read it as seven real errors. It was not
+— the string was matching the explanatory **comment I had just inserted**
+into those seven files, echoed back in the error context. The seven real
+errors were all the cacheComponents incompatibility. Corrected before
+reporting.
+
+**The actual cause, found by comparing against the route that did NOT
+fail.** With `cacheComponents: true`, Next prerenders a route handler until
+it touches request data; touching `req` is what marks the request dynamic
+and aborts prerendering. Ordering therefore decides everything:
+
+| route | order | outcome |
+|---|---|---|
+| `lib/x402.ts` (all 4 premium routes) | client, *then* `req.headers` | prerender throws |
+| `/api/gateway/withdraw` | client, *then* `req.json()` | prerender throws |
+| `/api/ballast/ask` | `req.cookies`, *then* client | fine — and notably never reported failing |
+
+#044 had placed the client at the very top of each handler, so the throw
+happened before Next could reach its bail-out point.
+
+**Fix:** move construction to after the request has been read — in
+`lib/x402.ts` to just before the `payment_events` write, and in
+`withdraw/route.ts` to just before the `withdrawals` insert. Both now match
+the ordering of `/api/ballast/*`, which was already correct.
+
+**Verified by reproducing the failure locally, not by assuming.** A passing
+local build proves little here, because `.env.local` exists locally, so
+`createClient` succeeds even if the handler is prerendered. Building with
+`.env.local` temporarily moved aside reproduces Vercel's condition exactly.
+Both directions were run, as a control:
+
+| build, no env vars | result |
+|---|---|
+| pre-fix code (stashed) | **exit 1 — `Error: supabaseUrl is required.`** |
+| fixed code | **exit 0** |
+
+That confirms both that the local no-env build faithfully reproduces the
+Vercel failure, and that this change is what resolves it. `.env.local` was
+copied first and verified byte-identical (`cmp`) after each run.
+
+**Also verified:** `tsc --noEmit` 0; engine **14/14**; assistant **26/26**;
+normal build exit 0 with all four `/api/premium/*` routes present as
+dynamic (`ƒ`); runtime smoke — premium quote/dataset/agent-task 402 on GET,
+compute 402 on POST, withdraw 400 on empty body, `/welcome` 200,
+`/dashboard/observe` 200, `/api/gateway/balance` 200,
+`/api/ballast/ask` 401 unauthenticated. `/api/gateway/balance` was left
+untouched throughout, as instructed.
+**Confidence:** HIGH — unusually so for a deployment issue, because the
+failure was reproduced locally and shown to flip with this change alone.
+The remaining uncertainty is only whether Vercel's build environment
+differs from the reproduction in some further way.
+**Status:** Accepted. Supersedes the client placement introduced in #044.
