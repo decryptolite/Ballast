@@ -1,187 +1,163 @@
-# Arc Nanopayments Demo
+# Ballast
 
-Demonstrate gasless USDC nanopayments using [Circle Nanopayments](https://www.circle.com/nanopayments) on Arc. A **LangChain agent** acts as the buyer, autonomously paying for paywalled resources, while a **Next.js web app** acts as the seller, exposing x402-protected endpoints and providing a seller dashboard to monitor payments and withdraw earnings.
+**Settlement, observed.** A deterministic, evidence-based reconciliation instrument for Circle Nanopayments on Arc.
 
-Circle Gateway batches many signed offchain authorizations into a single onchain settlement, enabling economically viable sub-cent payments.
+> Ballast is the first financial instrument that tells you what it does not know.
 
-<img alt="Arc Nanopayments Demo dashboard" src="public/screenshot.png" />
+---
 
-## Table of Contents
+## The problem
 
-- [Prerequisites](#prerequisites)
-- [Getting Started](#getting-started)
-- [How It Works](#how-it-works)
-- [Paywalled Endpoints](#paywalled-endpoints)
-- [Seller Dashboard](#seller-dashboard)
-- [Environment Variables](#environment-variables)
-- [Demo Credentials](#demo-credentials)
+Circle Nanopayments verifies a payment offchain instantly — the buyer signs an EIP-3009 authorization, the seller delivers immediately. Actual settlement happens later, inside a Gateway batch.
 
-## Prerequisites
+Between those two moments the money is real, owed, and unaccounted for. And it stays invisible, because **per-payment onchain settlement proof does not exist in Circle's own API**:
 
-- **Node.js v22+** — Install via [nvm](https://github.com/nvm-sh/nvm)
-- **Supabase CLI** — Install via `npm install -g supabase` or see [Supabase CLI docs](https://supabase.com/docs/guides/cli/getting-started)
-- **Docker Desktop** (only if using the local Supabase path) — [Install Docker Desktop](https://www.docker.com/products/docker-desktop/)
-- *(Optional)* An **[OpenAI API key](https://platform.openai.com/api-keys)** — enables the LLM-driven payment agent. Without it, the agent runs in mock mode with scripted tool calls.
+- `/v1/x402/settle` returns a `transaction` field that is a **UUID** — an internal settlement reference queued for batch processing, *not* an onchain transaction hash. (The SDK's own `.d.ts` mislabels it as a hash; the API reference is authoritative and contradicts it.)
+- No onchain event corresponds to one specific payment being batch-settled.
+- The only genuine onchain evidence is the seller's *aggregate* withdrawal — real, but disconnected from any individual payment.
 
-## Getting Started
+That interval is not an edge case. It is every payment, every time.
 
-1. Clone the repository and install dependencies:
+## What Ballast does
 
-   ```bash
-   git clone https://github.com/akelani-circle/arc-nanopayments-demo.git
-   cd arc-nanopayments-demo
-   npm install
-   ```
+Ballast observes the signals that actually exist and produces a replayable, confidence-scored, evidence-attached conclusion for each payment's lifecycle state.
 
-2. Set up environment variables:
+| State | What it is | Basis |
+|---|---|---|
+| **VERIFIED** | A recorded fact (confidence `1.0`) | Circle's facilitator accepted the authorization |
+| **FLOATING** | A derived conclusion, well corroborated | The pending batch total accounts for this payment's value |
+| **RECONCILED** | An inference, **never** a proof | The batch holding it cleared — offchain, Circle-asserted, aggregate |
+| **BREAK** | Positively unaccounted for | Window elapsed, observer coverage present, value never entered a batch |
+| `insufficient_observation_coverage` | An honest non-answer | We weren't watching — reported as such, never as BREAK |
 
-   ```bash
-   cp .env.example .env.local
-   ```
+Two rules the system enforces structurally, not by convention:
 
-   Then edit `.env.local` and fill in all required values (see [Environment Variables](#environment-variables) section below).
+- **RECONCILED is capped below certainty.** No edit can raise it to `1.0`, because no per-payment onchain proof exists to justify it.
+- **A monitoring gap never becomes an accusation.** Absence of observer coverage yields `insufficient_observation_coverage`, never `BREAK`.
 
-3. Generate seller and buyer wallets:
+Confidence tiers observed in practice: `0.95` (exact-sum attribution while floating), `0.75` (witnessed rise-and-clearance within coverage), `0.6` (rise observed outside full coverage), `1.0` only for VERIFIED.
 
-   ```bash
-   npm run generate-wallets
-   ```
+## Key features
 
-   This creates two EVM wallets (seller and buyer) and writes the addresses and private keys to `.env.local`. Follow the on-screen instructions to fund the buyer wallet with testnet USDC via the [Circle faucet](https://faucet.circle.com/).
+- **Append-only evidence log** — two streams, `verification_events` and `chain_observations`. Immutability is enforced at the database privilege level via explicit `REVOKE UPDATE, DELETE`, not merely by omitting an RLS policy (Supabase's `service_role` bypasses RLS by default, so the REVOKE is the real enforcement).
+- **Chain observer** — a standalone poller, independent of the payment flow, reading Gateway `/v1/balances` and onchain state. It established empirically that Gateway's `pendingBatch` behaves as an *exact running accumulator* of floating value — which is what makes arithmetic attribution possible rather than mere timing correlation.
+- **Deterministic inference engine (`inferStateV1`)** — a pure, versioned function `(verification_event, chain_observations[], options?) → { state, confidence, signals[], engine_version }`. No writes, no side effects, and **no clock reads** (`asOf` is derived from the input data, not `Date.now()`), so the same evidence and engine version always produce the same answer.
+- **Timeline Replay** — scrub a payment across its real recorded evidence points and see the state as it stood at each one. Ticks are discrete and correspond to actual observations; there is no interpolation, because interpolating would imply evidence that was never recorded.
+- **Audit Export** — one self-describing JSON document per payment: the evidence, the conclusion, the signals, the engine version, the remediation history, and an explicit statement of what is fact versus inference.
+- **BREAK remediation** — acknowledge / resolve-with-required-note, recorded append-only in `remediation_events`. These are **human-action records, architecturally type-separated from system evidence and never read by the inference engine**. A resolved BREAK is still a BREAK in engine terms; "resolved" is a human claim shown beside the conclusion, never in place of it.
+- **AI Evidence Assistant ("Ask Ballast")** — see below.
 
-4. Set up the database — Choose one of the two paths below:
+### The Evidence Assistant, and how its guardrails were tested
 
-   <details>
-   <summary><strong>Path 1: Local Supabase (Docker)</strong></summary>
+The hard architectural rule is that **the LLM never determines payment truth**. The pipeline is fixed: scoped evidence retrieval → the existing inference engine → an LLM *explanation* layer only → an answer terminating in cited evidence.
 
-   Requires Docker Desktop installed and running.
+This is enforced by two independent layers of code, not by prompt instructions:
 
-   ```bash
-   npx supabase start
-   npx supabase migration up
-   ```
+1. **Structural.** The client sends only a payment id and a question. Evidence is retrieved server-side and the conclusion is recomputed server-side by `inferStateV1`. State, confidence, engine version and the cited signal objects are never parsed out of model text — the model may only select *which real signals* to cite, by index.
+2. **Validation.** A candidate answer is rejected outright for hedging, certainty overclaim, onchain-settlement claims, any confidence figure differing from the engine's, identifiers or amounts absent from the evidence, or citations of signals that do not exist. Rejection falls back to a deterministic answer composed from engine output.
 
-   The output of `npx supabase start` will display the Supabase URL and API keys needed for your `.env.local`.
+**Verified adversarially against a real model, not simulated.** Two tests, both against live Gemini:
 
-   </details>
+- A request injecting `state:"BREAK"`, `confidence:1.0`, `engine_version:"v99"`, a pre-written answer and a fabricated signal returned the true engine values (`RECONCILED @ 0.75`, `v1`) with real signal kinds — **every injected field ignored**.
+- Given a deliberately inverted system prompt, the live model produced a genuinely non-compliant answer (claiming onchain settlement, asserting `0.99` confidence, hedging, and presenting a real identifier as a transaction hash). The guardrails **rejected it with four violations** and served the deterministic answer instead.
 
-   <details>
-   <summary><strong>Path 2: Remote Supabase (Cloud)</strong></summary>
+The refusal path is real code, reached *before* any model call: cross-payment, predictive, advice-seeking and norm-comparison questions return "The available evidence does not show that." without a model ever being invoked. Guardrail suite: **26 passing tests**.
 
-   Requires a [Supabase](https://supabase.com/) account and project.
+## Architecture
 
-   ```bash
-   npx supabase link --project-ref <your-project-ref>
-   npx supabase db push
-   ```
+Three planes, strictly separated:
 
-   Retrieve your project URL and API keys from the Supabase dashboard under **Settings > API**.
-
-   </details>
-
-5. Start the development server:
-
-   ```bash
-   npm run dev
-   ```
-
-   The app will be available at `http://localhost:3000`.
-
-6. Run the AI payment agent:
-
-   ```bash
-   npm run agent
-   ```
-
-   The agent uses the buyer wallet to purchase resources from the x402-protected premium endpoints, paying with USDC on the Arc Testnet. If `OPENAI_API_KEY` is set, the agent uses the LLM to decide which tools to call; otherwise it falls back to a scripted mock run. You can optionally pass a custom query:
-
-   ```bash
-   npm run agent -- "Buy me a quote at http://localhost:3000/api/premium/quote"
-   ```
-
-   To set a USDC spending limit, use the `--limit` flag. The agent will pause when the limit is reached and prompt for additional allowance:
-
-   ```bash
-   npm run agent -- --limit 0.5
-   ```
-
-## How It Works
-
-- Built with [Next.js](https://nextjs.org/) App Router and [Supabase](https://supabase.com/)
-- Uses the [x402 protocol](https://www.x402.org/) for HTTP 402 nanopayments with USDC on the [Arc Network](https://arc.circle.com/)
-- Uses [Circle's x402 batching SDK](https://www.npmjs.com/package/@circle-fin/x402-batching) (`GatewayClient`) for gasless payment facilitation
-- Includes an AI payment agent built with [LangChain](https://js.langchain.com/) and [Deep Agents](https://www.npmjs.com/package/deepagents) that can check balances, deposit USDC into Gateway, verify endpoint support, and autonomously pay for x402-protected resources
-- Seller dashboard with real-time payment monitoring, Gateway balance display, and cross-chain withdrawal support
-- Payment events and withdrawals are persisted to Supabase with real-time subscriptions
-- Styled with [Tailwind CSS](https://tailwindcss.com) and components from [shadcn/ui](https://ui.shadcn.com/)
-
-## Paywalled Endpoints
-
-The seller exposes several x402-protected API routes at different price points:
-
-| Endpoint | Method | Price (USDC) | Description |
-| --- | --- | --- | --- |
-| `/api/premium/quote` | GET | $0.001 | Returns a premium inspirational quote |
-| `/api/premium/dataset` | GET | $0.01 | Returns a small JSON analytics dataset |
-| `/api/premium/compute` | POST | $0.0003 | Performs text analysis on submitted content |
-| `/api/premium/agent-task` | GET | $0.03 | Returns a clue/step for a treasure hunt task |
-
-Each endpoint returns `402 Payment Required` for unpaid requests. The buyer agent automatically signs the authorization and retries with the payment signature to receive the content.
-
-## Seller Dashboard
-
-The dashboard at `/dashboard` provides:
-
-- **Gateway Balance** — Top-bar badge showing the seller's available Gateway balance, with a detail dialog for total, withdrawing, withdrawable, and wallet USDC balances
-- **Payments Table** — Real-time list of incoming nanopayments with filtering and sorting, linked to [Arc Testnet Explorer](https://testnet.arcscan.app)
-- **Withdraw Dialog** — Withdraw available USDC from Gateway to a wallet address on any supported testnet chain (Arc Testnet, Base Sepolia, Ethereum Sepolia, Arbitrum Sepolia, Optimism Sepolia, Avalanche Fuji, Polygon Amoy)
-
-## Environment Variables
-
-Copy `.env.example` to `.env.local` and fill in the required values:
-
-```bash
-# Supabase
-NEXT_PUBLIC_SUPABASE_URL=your-project-url
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-publishable-or-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-
-# x402 / Circle Nanopayments
-SELLER_ADDRESS=0xYourWalletAddress
-SELLER_PRIVATE_KEY=0xYourSellerPrivateKey
-
-# Buyer wallet (for the payment agent)
-BUYER_ADDRESS=0xYourBuyerWalletAddress
-BUYER_PRIVATE_KEY=0xYourBuyerPrivateKey
-
-# AI Payment Agent (optional — omit to run in mock mode)
-# OPENAI_API_KEY=your-openai-api-key
+```
+INGESTION       verification_events   ← lib/x402.ts, at the exact point the
+                                        x402 middleware accepts a payment
+                chain_observations    ← chain-observer.mts, independent poller
+                (both append-only, REVOKE-enforced)
+                             │
+INFERENCE       inferStateV1(event, observations[], options?)
+                pure · versioned · no I/O · no clock read
+                → { state, confidence, signals[], engine_version }
+                             │
+PRESENTATION    /dashboard/observe · Operational State · Ask Ballast
+                reads only; never computes state itself
 ```
 
-| Variable | Scope | Purpose |
-| --- | --- | --- |
-| `NEXT_PUBLIC_SUPABASE_URL` | Public | Supabase project URL. |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Public | Supabase anonymous / publishable key. |
-| `SUPABASE_SERVICE_ROLE_KEY` | Server-side | Supabase service-role key, used to record payment events and withdrawals. |
-| `SELLER_ADDRESS` | Server-side | EVM wallet address for receiving USDC payments. |
-| `SELLER_PRIVATE_KEY` | Server-side | Seller wallet private key, used for Gateway balance queries and withdrawals. |
-| `BUYER_ADDRESS` | Agent | Buyer wallet address for making payments. |
-| `BUYER_PRIVATE_KEY` | Agent | Buyer wallet private key for signing payment authorizations. |
-| `OPENAI_API_KEY` | Agent | *(Optional)* OpenAI API key. If omitted, the agent runs in mock mode with scripted tool calls. |
+The Operational State surface is queried **independently** of the ledger, so it can never be wrong by being coupled to another surface's stale data.
 
-> **Tip:** Run `npm run generate-wallets` to auto-generate the `SELLER_ADDRESS`, `SELLER_PRIVATE_KEY`, `BUYER_ADDRESS`, and `BUYER_PRIVATE_KEY` values.
+## Tech stack
 
-## Demo Credentials
+- **Next.js 16** (App Router, Turbopack, Cache Components) + TypeScript
+- **Supabase** — Postgres evidence log, RLS plus privilege-level append-only enforcement
+- **Arc Testnet / Circle Nanopayments** — `@circle-fin/x402-batching`, Gateway API, the x402 protocol
+- **Google Gemini** (`gemini-3.5-flash-lite`) — explanation layer only, provider-agnostic behind an interface; falls back to deterministic answers when no key is configured
+- **IBM Plex** (Serif / Sans / Mono), self-hosted via `@fontsource`
 
-The app uses a hardcoded demo account for local development:
+## Running locally
 
-| Email | Password |
-| --- | --- |
-| `admin@example.com` | `123456` |
+```bash
+npm install
+cp .env.example .env.local     # then fill in the values
+npm run dev                    # http://localhost:3000
+```
 
-## Security & Usage Model
+Required environment variables (**names only** — never commit values):
 
-This sample application:
-- Assumes testnet usage only
-- Handles secrets via environment variables
-- Is not intended for production use without modification
+| Variable | Used for |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Browser (anon) reads |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server-side evidence writes |
+| `SELLER_ADDRESS` | Seller wallet address |
+| `SELLER_PRIVATE_KEY` | Gateway withdrawals |
+| `GEMINI_API_KEY` | *Optional.* Ask Ballast's explanation layer; without it the assistant answers deterministically |
+
+`BUYER_ADDRESS` / `BUYER_PRIVATE_KEY` are needed only by the local scripts (`agent.mts`, `generate-wallets.mts`), never by the deployed app.
+
+Database migrations live in `supabase/migrations/` and must be applied to the Supabase project before the app has anything to read or write.
+
+Other commands:
+
+```bash
+npm run test:engine      # inference engine unit tests (14)
+npm run test:assistant   # assistant guardrail tests (26)
+npm run agent            # drive real x402 payments (spends testnet USDC)
+npm run chain-observer   # run the chain observer
+npm run infer:replay     # replay the engine over real evidence, read-only
+```
+
+**Demo access:** `admin@example.com` / `123456` — inherited demo credentials, shown on the sign-in page and pre-filled. Explicitly not production-appropriate.
+
+## Built on Circle's reference implementation
+
+Ballast is a fork of [`circlefin/arc-nanopayments`](https://github.com/circlefin/arc-nanopayments), Circle's own Arc Nanopayments reference app. The existing payment flow, x402 middleware, Gateway integration and Supabase persistence were **preserved and extended, never rebuilt** — Ballast is layered on top. The `/dashboard` payments and withdrawals views are the original reference app; `/dashboard/observe` is Ballast.
+
+Arc and Circle marks used for attribution are the official assets from [circle.com/pressroom](https://www.circle.com/pressroom), unmodified. Factual attribution only — no affiliation or endorsement is claimed or implied.
+
+## Known limitations
+
+Stated plainly, because a system whose premise is honest reporting should be honest about itself.
+
+- **Seller wallet has no native gas on Arc Testnet.** Confirmed directly via RPC. The withdrawal flow's pre-check correctly rejects with a clear message, so a full end-to-end withdrawal cannot complete without funding that wallet.
+- **Visual verification is not automated (MEDIUM confidence).** No browser/E2E suite exists — Playwright's binary CDN is unreachable from the build environment. Visual claims were verified through served markup, programmatic contrast measurement and typechecking, and confirmed by manual human checks, but not by automated tests.
+- **Demo-grade authentication.** A single hardcoded credential pair inherited from the fork, behind a cookie gate. Not production-appropriate; because there is no real identity, remediation records use a placeholder `operator` actor.
+- **BREAK has never fired on real data**, because no real payment has yet gone missing. Its logic is exercised only by fixed test evidence. Likewise the `0.9` onchain-corroborated confidence tier, which requires a seller withdrawal that has not occurred.
+- **Ask Ballast conversations are not logged as evidence.** Whether they should be is a genuinely open question, deliberately unresolved rather than silently decided.
+- **No load testing.** Under high concurrency (~40 in-flight agent requests/sec) against the shared public Arc testnet RPC, `verify()` calls have returned HTML error pages instead of JSON, with latencies of 40–50s. Known, unaddressed, and orthogonal to the core hypothesis.
+- **No formal accessibility audit.** Colour-contrast pairs were verified programmatically against WCAG AA; nothing broader has been assessed.
+
+## Project documentation
+
+The reasoning behind every decision is recorded append-only, rather than summarised after the fact:
+
+| Document | Contents |
+|---|---|
+| `DECISIONS.md` | Append-only decision log — every architectural and product decision with its reasoning, tradeoffs and status |
+| `BALLAST_MASTER_SPEC.md` | Consolidated, implementation-ready specification |
+| `DESIGN_PHILOSOPHY.md` | Permanent design constitution |
+| `BALLAST_DESIGN_SYSTEM.md` | Concrete design tokens, components, acceptance criteria |
+| `BALLAST_VISUAL_IDENTITY_REBUILD.md` | Visual identity brief |
+| `PARKING_LOT.md` | Deferred ideas, each with why it was deferred |
+| `CLAUDE.md` | Engineering operating rules, including the confidence policy |
+
+---
+
+Licensed under Apache 2.0, per the upstream reference implementation.
