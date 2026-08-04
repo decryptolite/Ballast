@@ -43,6 +43,19 @@ const SUPPORTED_CHAIN_LABELS: Record<string, string> = {
 // of construction changed.
 
 export async function POST(req: NextRequest) {
+  // Session gate, enforced server-side and FIRST.
+  //
+  // This route moves real funds. Until /dashboard/observe was made public it
+  // was reachable only from pages behind the proxy's redirect, so it had no
+  // check of its own — page-level auth was doing the work. That is no longer
+  // true: the withdraw control lives in the dashboard layout shared by BOTH
+  // /dashboard and the now-public /dashboard/observe. Without this check,
+  // making the page public would have exposed an unauthenticated
+  // fund-moving endpoint (DECISIONS.md #048).
+  if (req.cookies.get("session")?.value !== "authenticated") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const privateKey = process.env.SELLER_PRIVATE_KEY;
   if (!privateKey) {
     return NextResponse.json(

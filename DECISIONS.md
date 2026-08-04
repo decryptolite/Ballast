@@ -2236,3 +2236,73 @@ var names, and the autofill rendering — all verified directly against the
 running app, the live database, and served HTML. MEDIUM only on visual
 appearance, unseen in a browser.
 **Status:** Accepted. Step 3 not started.
+
+---
+
+### Decision #048 — /dashboard/observe made publicly viewable; an
+### unprotected fund-moving route found and closed in the same change
+**Decision:** `proxy.ts` now exempts `/dashboard/observe` (and anything
+beneath it) from the session redirect, so Ballast's observability screen is
+public. `/dashboard` — the inherited payments/withdrawals demo — remains
+gated exactly as before. No other redirect logic changed.
+
+**A genuinely unprotected write route was found while doing this, and it
+was not one of the routes flagged in the request.** `POST
+/api/gateway/withdraw` — which moves real funds — had **no server-side auth
+check at all**. It was safe only because page-level auth kept
+unauthenticated users away from the button that calls it. That button lives
+in `TopBarGatewayControls`, which is rendered by the dashboard layout shared
+by BOTH `/dashboard` and `/dashboard/observe`. Making the page public
+without fixing this would have exposed an unauthenticated fund-moving
+endpoint to the internet. A session check was added as the first statement
+in the handler. **This is the single most important part of this change**,
+and it is precisely the class of bug the "public read must never become
+public write" requirement exists to catch.
+
+**Individually verified with real requests against a production build:**
+
+| requirement | result |
+|---|---|
+| `GET /dashboard/observe`, no cookie | **200** |
+| `POST /api/ballast/remediation`, no cookie | **401** `{"error":"Unauthorized"}` |
+| `POST /api/ballast/ask`, no cookie | **401** — unchanged |
+| `POST /api/gateway/withdraw`, no cookie | **401** — newly enforced |
+| `GET /dashboard`, no cookie / with cookie | **307 / 200** — unchanged |
+| engine tests | 14/14 |
+| assistant guardrail tests | 26/26 |
+| `tsc --noEmit` / `npm run build` | clean / exit 0 |
+
+**Defence in depth, verified at the database layer too.** Beyond the route
+handlers, the anon key that a logged-out browser actually uses was tested
+directly: it can **read** `verification_events` (315 rows),
+`chain_observations` (547) and `remediation_events`, and is **denied** on
+insert to `remediation_events` and `verification_events` ("new row violates
+row-level security policy"). So even bypassing the app entirely and hitting
+Supabase directly, a public visitor cannot mutate anything. Public read did
+not become public write at either layer.
+
+**Stated honestly — one requirement could NOT be fully verified here.** The
+request asked to confirm the public page shows *real data*. The 200 is
+verified, but `/dashboard/observe` is a client component: `useObservability`
+fetches in a `useEffect`, so the served HTML contains only the "Reading
+evidence…" placeholder and curl — which runs no JavaScript — can never see
+the rendered rows. What *was* verified is the data path that a real browser
+will use: the anon key reads exactly the queries the hook issues, returning
+315 and 547 real rows (latest: `/api/premium/compute 0.0003 USDC`). The
+rendered result itself still needs a browser, consistent with the standing
+no-E2E limitation.
+
+**Two consequences worth knowing, not silently accepted:**
+1. **Ask Ballast is visible but unusable to a public visitor** — the route
+   still requires a session (unchanged, as instructed), so a logged-out user
+   sees the assistant and gets 401 on submit.
+2. **The Withdraw control is visible on the public page** and now returns
+   401. Secure, but a logged-out visitor sees an affordance they cannot use.
+Both are UI consequences of a shared layout, not security issues. Hiding
+them for unauthenticated users would need auth state plumbed to the client
+and is deliberately not attempted here.
+**Confidence:** HIGH on every authorization result above and on the
+database-layer denials — all verified with real requests, not assumed.
+MEDIUM only on the public page's rendered appearance and populated data,
+which requires a browser to confirm.
+**Status:** Accepted.

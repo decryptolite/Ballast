@@ -27,8 +27,22 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
-  // Logged-out user trying to access protected routes -> redirect to sign-in
-  if (pathname.startsWith("/dashboard") && session !== "authenticated") {
+  // Ballast's observability screen is public: it is the product, and it is
+  // read-only. Everything it renders comes from evidence tables that already
+  // allow public SELECT, and every WRITE path reachable from the page
+  // enforces the session server-side in its own route handler, independently
+  // of this gate (see DECISIONS.md #048). Page-level auth is therefore not
+  // what protects any mutation — removing it here changes what can be READ,
+  // never what can be WRITTEN.
+  const isPublicObservability = pathname.startsWith("/dashboard/observe");
+
+  // Logged-out user trying to access protected routes -> redirect to sign-in.
+  // /dashboard (the inherited payments/withdrawals demo) stays gated.
+  if (
+    pathname.startsWith("/dashboard") &&
+    !isPublicObservability &&
+    session !== "authenticated"
+  ) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
