@@ -16,27 +16,52 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+// Ballast — sign in.
+//
+// Presentation only. The server action, session creation and the demo
+// credential VALUES are untouched; this file changed what the page looks
+// like and where the credentials live, nothing about how auth works.
+//
+// The mark is the anchor. Demo credentials are no longer displayed: they sit
+// behind a secondary "Use demo account" control that fills the form. The
+// fields therefore start EMPTY — a pre-filled form would still put the
+// credentials on screen, which is exactly what this redesign removes.
+//
+// Motion: none, except the error message, which appears only when something
+// actually changed (a failed attempt). No decorative animation.
+
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { login } from "./actions";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { color, radius, space, text } from "@/lib/ballast/design-tokens";
+import { BallastWordmark } from "@/components/brand/ballast-mark";
+import { button, color, radius, space, text } from "@/lib/ballast/design-tokens";
 
-// Demo credentials, stated plainly so a first-time visitor is never stuck at
-// the door. Informational styling only — the caption voice and a hairline
-// panel, never a warning or error tone: this is a fact about the demo, not a
-// problem. The values are set in sans/mono per the design system's split
-// between interface chrome and literal data.
+// Unchanged values, reused — not redeclared or duplicated anywhere.
 const DEMO_EMAIL = "admin@example.com";
 const DEMO_PASSWORD = "123456";
+
+const fieldStyle: React.CSSProperties = {
+  ...text.ui,
+  fontWeight: 400,
+  color: color.textPrimary,
+  background: color.canvas,
+  border: `1px solid ${color.line}`,
+  borderRadius: radius,
+  padding: `10px ${space.sm}px`,
+  width: "100%",
+  display: "block",
+  outline: "none",
+};
 
 export default function SignIn() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  // Controlled so the demo control can fill them. The form still submits via
+  // the same server action, with the same field names.
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   async function handleSubmit(formData: FormData) {
     setPending(true);
@@ -49,72 +74,200 @@ export default function SignIn() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center p-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle className="text-2xl">Sign in</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Enter your credentials to access the dashboard
-          </p>
-          <div
+    <main
+      style={{
+        minHeight: "100vh",
+        background: color.canvas,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: space.lg,
+      }}
+    >
+      <div style={{ width: "100%", maxWidth: 400 }}>
+        {/* The mark is the page's anchor, given its own clearspace. */}
+        <div style={{ display: "flex", justifyContent: "center" }}>
+          <BallastWordmark size={26} />
+        </div>
+
+        <p
+          style={{
+            ...text.body,
+            color: color.textSecondary,
+            textAlign: "center",
+            margin: `${space.xs}px 0 0`,
+          }}
+        >
+          Settlement, observed.
+        </p>
+
+        {/* Surface panel: depth by tone and a hairline, never a shadow. */}
+        <section
+          style={{
+            background: color.surface,
+            border: `1px solid ${color.line}`,
+            borderRadius: radius,
+            padding: space.xl,
+            marginTop: space.xl,
+          }}
+        >
+          <h1
             style={{
-              border: `1px solid ${color.line}`,
-              borderRadius: radius,
-              background: color.surface,
-              padding: space.sm,
-              marginTop: space.sm,
+              ...text.h3,
+              color: color.textPrimary,
+              margin: 0,
             }}
           >
-            <div style={{ ...text.caption, color: color.textTertiary }}>
-              Demo access
-            </div>
-            <div
-              style={{
-                ...text.data,
-                color: color.textPrimary,
-                marginTop: space.xxs,
-                wordBreak: "break-all",
-              }}
-            >
-              email: {DEMO_EMAIL}
-              <br />
-              password: {DEMO_PASSWORD}
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <form action={handleSubmit} className="flex flex-col gap-4">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
+            Sign in
+          </h1>
+
+          <form
+            action={handleSubmit}
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: space.md,
+              marginTop: space.lg,
+            }}
+          >
+            <div>
+              <label
+                htmlFor="email"
+                style={{
+                  ...text.caption,
+                  color: color.textTertiary,
+                  display: "block",
+                  marginBottom: space.xxs,
+                }}
+              >
+                Email
+              </label>
+              <input
                 id="email"
                 name="email"
                 type="email"
-                placeholder="Email"
-                defaultValue={DEMO_EMAIL}
+                autoComplete="username"
                 required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                style={fieldStyle}
               />
             </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
+
+            <div>
+              <label
+                htmlFor="password"
+                style={{
+                  ...text.caption,
+                  color: color.textTertiary,
+                  display: "block",
+                  marginBottom: space.xxs,
+                }}
+              >
+                Password
+              </label>
+              <input
                 id="password"
                 name="password"
                 type="password"
-                placeholder="Password"
-                defaultValue={DEMO_PASSWORD}
+                autoComplete="current-password"
                 required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                style={fieldStyle}
               />
             </div>
+
+            {/* Appears only when an attempt actually failed — the one place on
+                this page where information changes, so the one place motion is
+                justified. System error tone, never the BREAK state colour. */}
             {error && (
-              <p className="text-sm text-destructive">{error}</p>
+              <p
+                className="blst-unfold"
+                role="alert"
+                style={{
+                  ...text.caption,
+                  color: color.systemError,
+                  margin: 0,
+                }}
+              >
+                {error}
+              </p>
             )}
-            <Button type="submit" disabled={pending} className="w-full">
-              {pending ? "Signing in..." : "Sign in"}
-            </Button>
+
+            <button
+              type="submit"
+              disabled={pending}
+              className="blst-primary"
+              style={{
+                ...button.primary,
+                width: "100%",
+                padding: `10px ${space.md}px`,
+                marginTop: space.xxs,
+              }}
+            >
+              {pending ? "Signing in…" : "Sign in"}
+            </button>
           </form>
-        </CardContent>
-      </Card>
+
+          {/*
+            Secondary, deliberately quiet. This is the only place the demo
+            credentials exist in the UI now, and they are filled rather than
+            displayed. A future "or continue with…" section would sit
+            naturally between the submit button above and this divider — no
+            placeholder is rendered for it, because a button that does
+            nothing reads as broken, not as forward-looking.
+          */}
+          <div
+            style={{
+              borderTop: `1px solid ${color.line}`,
+              marginTop: space.lg,
+              paddingTop: space.md,
+              display: "flex",
+              justifyContent: "center",
+            }}
+          >
+            <button
+              type="button"
+              className="blst-ghost"
+              onClick={() => {
+                setEmail(DEMO_EMAIL);
+                setPassword(DEMO_PASSWORD);
+                setError(null);
+              }}
+              style={{
+                ...text.caption,
+                color: color.textSecondary,
+                background: "none",
+                border: "none",
+                padding: 0,
+                cursor: "pointer",
+              }}
+            >
+              Use demo account
+            </button>
+          </div>
+        </section>
+
+        {/* The observability screen is public (DECISIONS.md #048), so offer it
+            directly rather than making a visitor sign in to see the product. */}
+        <p
+          style={{
+            ...text.caption,
+            color: color.textTertiary,
+            textAlign: "center",
+            margin: `${space.lg}px 0 0`,
+          }}
+        >
+          <Link
+            href="/dashboard/observe"
+            className="blst-ghost"
+            style={{ color: color.textSecondary }}
+          >
+            View the ledger without signing in
+          </Link>
+        </p>
+      </div>
     </main>
   );
 }

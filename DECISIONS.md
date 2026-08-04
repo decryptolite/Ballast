@@ -2306,3 +2306,77 @@ database-layer denials — all verified with real requests, not assumed.
 MEDIUM only on the public page's rendered appearance and populated data,
 which requires a browser to confirm.
 **Status:** Accepted.
+
+---
+
+### Decision #049 — Sign-in screen redesigned; demo credentials moved behind
+### a secondary control
+**Decision:** Rebuilt `app/page.tsx` as a presentation-only change. The
+`git diff` for `app/actions.ts`, `proxy.ts`, `app/api/**` and `lib/x402.ts`
+is empty — the server action, session creation, and the DEMO_EMAIL /
+DEMO_PASSWORD values are byte-identical. Only the page changed.
+
+**What the page is now:** the mark anchors it, with its own clearspace, over
+the tagline "Settlement, observed." Below sits a single `--surface` panel
+with a hairline border — depth by tone, never a shadow, per the token
+system. Plex Serif carries the tagline, Sans the form chrome, at the
+established scale. All colour comes from Stage 1 tokens; the page contains
+no hex literal at all.
+
+**The demo-credential mechanism, and the tradeoff it forced.** The
+credentials now sit behind a quiet "Use demo account" text button below a
+hairline divider, which fills both fields on click. Chosen over a popover or
+expandable disclosure because it is one interaction rather than two, needs
+no extra chrome, and puts the credentials nowhere on screen — a disclosure
+that reveals text would still end with the credentials displayed, which is
+what this redesign exists to remove.
+
+That required making the inputs **controlled and initially empty**. The
+previous build pre-filled them via `defaultValue` (#047 step 2) so a visitor
+could click Sign in immediately. Those two goals are in direct conflict: a
+pre-filled form necessarily shows the credentials. The redesign brief is
+explicit that they must not be visible, so the pre-fill was removed and
+signing in as a demo user is now two clicks ("Use demo account", then "Sign
+in") rather than one. Flagged rather than silently traded away.
+
+**Future auth methods: structure, not placeholders.** The layout leaves a
+natural slot between the submit button and the divider where an "or continue
+with…" section would sit. Nothing is rendered there. A non-functional OAuth
+button would read as broken rather than forward-looking, and the brief
+explicitly forbids it.
+
+**Motion:** none, except the error message, which uses `.blst-unfold` and
+appears only after a failed attempt — the one moment on this page where
+information actually changes. No decorative animation anywhere.
+
+**Also added:** a tertiary link, "View the ledger without signing in",
+pointing at the now-public `/dashboard/observe` (#048). A visitor no longer
+needs credentials to see the product at all.
+
+**Verified — the sign-in flow was exercised for real, not assumed.** The
+`login` server action id was extracted from
+`.next/server/server-reference-manifest.json`
+(`4043c85f…`, the only action registered for `app/page`) and invoked
+directly against the production server:
+
+| test | result |
+|---|---|
+| correct demo credentials | **303 See Other**, `Set-Cookie: session=authenticated; HttpOnly; SameSite=lax`, `x-action-redirect: /dashboard/observe` |
+| wrong credentials | **200**, **zero** session cookies set, body contains "Invalid credentials" |
+
+So the same credentials still authenticate, the same session cookie is
+issued, and bad credentials are still refused — after the redesign.
+
+Rendered page also confirmed: `name="email"` and `name="password"` both
+present, "Use demo account" present, wordmark present, and
+`admin@example.com` and the "Demo access" box both **absent** from the
+served HTML — the credentials are genuinely no longer on the page.
+
+**Other checks:** `tsc --noEmit` 0; engine **14/14**; assistant **26/26**
+(unchanged, confirming presentation-only); `npm run build` exit 0; no new
+colour literals; no OAuth/SSO markup.
+**Confidence:** HIGH on the auth flow, the constraint compliance, and the
+removal of credentials from the page — all verified against a production
+build with real requests. MEDIUM on the rendered appearance and whether it
+meets the intended quality bar, which needs a browser.
+**Status:** Accepted.
