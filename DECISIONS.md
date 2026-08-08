@@ -2380,3 +2380,76 @@ removal of credentials from the page — all verified against a production
 build with real requests. MEDIUM on the rendered appearance and whether it
 meets the intended quality bar, which needs a browser.
 **Status:** Accepted.
+
+---
+
+### Decision #050 — Scheduled chain observer as an authenticated HTTP route
+**Decision:** Added `app/api/cron/observe/route.ts`, which performs exactly
+one observation cycle and is protected by a shared secret. This lets the
+observer run in production without a laptop being on. Vercel Hobby's cron is
+once-per-day, far too coarse for `pendingBatch` — a signal that rises and
+clears within minutes — so an external scheduler calls this route instead.
+`chain-observer.mts` is **untouched** and remains the local-development
+path.
+
+**Statelessness is a faithful mirror, not a reinterpretation.** The script's
+`--once` flag runs a single cycle in a fresh process, where its
+`lastCheckedBlock` is null and the block scan therefore falls back to
+`LOOKBACK_BLOCKS`. A stateless HTTP invocation is precisely that same
+situation, so using the lookback window here reproduces what `--once`
+actually does rather than inventing new behaviour.
+
+**Auth, deliberately fail-closed.** Requires
+`Authorization: Bearer <OBSERVER_CRON_SECRET>`. Three specific choices:
+- **Missing env var returns 500, not 200.** Had it compared against an
+  undefined secret, an unconfigured deployment would have been triggerable
+  by anyone. It refuses to run rather than run unprotected.
+- **Constant-time comparison** (`crypto.timingSafeEqual`, with a length
+  check first), so the secret cannot be recovered by timing rejections.
+- **GET is accepted alongside POST.** POST is the correct verb for something
+  that writes, but several free schedulers only issue GETs. Both paths run
+  the identical secret check, so GET grants nothing extra.
+
+**Known duplication, flagged rather than hidden.** The observation logic is
+a *copy* of the script's, not a shared import. Real reuse would mean
+extracting a module both call — which requires editing `chain-observer.mts`,
+explicitly out of scope here. The consequence is real: a future change to
+the observation cycle must be made in **both** places. Rows written by this
+route carry `raw.source = "api/cron/observe"` so the two writers can be told
+apart in the evidence log without changing the row shape.
+
+**Client construction follows #044/#045:** built inside the handler's call
+path, after the request header has been read. `export const dynamic` is not
+used — `cacheComponents` rejects it outright.
+
+**Verified with real requests against a production build, counting rows
+before and after to prove writes only happen when authorized:**
+
+| test | status | chain_observations |
+|---|---|---|
+| no `Authorization` header | **401** | 753 → 753 |
+| wrong secret | **401** | 753 → 753 |
+| raw token without `Bearer ` prefix | **401** | 753 → 753 |
+| correct secret, POST | **200**, `ok:true` | 753 → **754** |
+| correct secret, GET | **200** | 754 → **755** |
+
+The successful POST wrote a genuine observation — id
+`990b58bb-e54d-4dda-a60c-43aba925af49`, `gateway_available: 4.0524`,
+`pending_batch: 0`, `pending_batch_column_written: true`. Real Gateway and
+RPC data, not a stub.
+
+**One typecheck issue found and fixed locally rather than globally:** the
+`0n` BigInt literal fails under tsconfig's ES2017 target, so the route uses
+`BigInt(0)`. `chain-observer.mts` uses `0n` freely only because `.mts` files
+fall outside tsconfig's `**/*.ts` include and are never typechecked — worth
+knowing, since it means the script has no type safety net.
+
+**Other checks:** `tsc` 0; engine **14/14**; assistant **26/26**; build exit
+0 with `/api/cron/observe` registered dynamic; every pre-existing route
+re-swept and unchanged. `OBSERVER_CRON_SECRET` documented in `.env.example`
+with no real value; a strong random value was generated into the local
+`.env.local` (still untracked) so the route could actually be tested.
+**Confidence:** HIGH — both auth directions and the write behaviour were
+verified with real requests and row counts, not assumed.
+**Status:** Accepted. Requires `OBSERVER_CRON_SECRET` to be set in the
+deployment environment before the route will do anything but 500.
