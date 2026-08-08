@@ -211,12 +211,20 @@ async function handle(req: NextRequest) {
   // Reading the request header first is both the auth check and what marks
   // this route dynamic — `export const dynamic` cannot be used here, as it
   // is rejected outright by `cacheComponents` (DECISIONS.md #045).
-  const provided = req.headers.get("authorization") ?? "";
-  const expected = process.env.OBSERVER_CRON_SECRET;
+  const provided = (req.headers.get("authorization") ?? "").trim();
+  // Trimmed: a value pasted into a dashboard env field very easily picks up
+  // a trailing newline or space, and the constant-time compare below starts
+  // with a length check — so one invisible character produced a 401 that
+  // looked exactly like a wrong secret.
+  const expected = process.env.OBSERVER_CRON_SECRET?.trim();
 
   // Fail CLOSED when the secret is not configured. Without this an
   // unconfigured deployment would compare against undefined and could be
   // triggered by anyone.
+  //
+  // NOTE, because it is a useful diagnostic: this returns 500, NOT 401. So a
+  // 401 from this route always means the variable IS set and the token did
+  // not match — it can never mean "the variable is missing".
   if (!expected) {
     console.error("[cron/observe] OBSERVER_CRON_SECRET is not configured");
     return NextResponse.json(
@@ -225,9 +233,35 @@ async function handle(req: NextRequest) {
     );
   }
 
-  const token = provided.startsWith("Bearer ") ? provided.slice(7) : "";
-  if (!token || !secretMatches(token, expected)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Scheme match is case-insensitive per RFC 7235 — schedulers and proxies
+  // are inconsistent about "Bearer" vs "bearer", and a case-sensitive
+  // startsWith() rejected the lowercase form with a misleading 401.
+  const match = /^Bearer\s+(.*)$/i.exec(provided);
+  const token = match ? match[1].trim() : "";
+
+  if (!token) {
+    // Coarse reason only — it names which stage failed, never any part of
+    // the secret, and reveals nothing an attacker could not learn by trying.
+    return NextResponse.json(
+      {
+        error: "Unauthorized",
+        reason: provided
+          ? "authorization_header_present_but_not_a_bearer_token"
+          : "missing_authorization_header",
+      },
+      { status: 401 },
+    );
+  }
+
+  if (!secretMatches(token, expected)) {
+    console.error(
+      `[cron/observe] secret mismatch (received token length ${token.length}, ` +
+        `expected length ${expected.length}) — value never logged`,
+    );
+    return NextResponse.json(
+      { error: "Unauthorized", reason: "secret_mismatch" },
+      { status: 401 },
+    );
   }
 
   try {

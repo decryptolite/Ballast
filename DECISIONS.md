@@ -2453,3 +2453,69 @@ with no real value; a strong random value was generated into the local
 verified with real requests and row counts, not assumed.
 **Status:** Accepted. Requires `OBSERVER_CRON_SECRET` to be set in the
 deployment environment before the route will do anything but 500.
+
+---
+
+### Decision #051 — Cron observe route returned 401 for legitimate callers;
+### three header-parsing bugs fixed, plus a 500-vs-401 diagnostic
+**Reported:** `/api/cron/observe` returned 401 in production despite the
+correct secret being sent, with Vercel deployment protection ruled out.
+
+**Three real bugs in #050's auth check, each producing exactly that
+symptom:**
+1. **No trimming of the expected secret.** `secretMatches` begins with a
+   length check, so a single trailing newline or space on the value pasted
+   into a dashboard env field caused a length mismatch and a 401 that looked
+   identical to a wrong secret. Now `.trim()`ed on both sides.
+2. **Case-sensitive scheme match.** `provided.startsWith("Bearer ")`
+   rejected `bearer <token>`. RFC 7235 defines the auth scheme as
+   case-insensitive and schedulers/proxies are inconsistent about it. Now
+   matched with `/^Bearer\s+(.*)$/i`, which also tolerates multiple spaces.
+3. **No trimming of the provided token**, so trailing whitespace in a
+   scheduler's config field failed the same way.
+
+**Added a coarse `reason` to 401 bodies** —
+`missing_authorization_header`, `authorization_header_present_but_not_a_
+bearer_token`, or `secret_mismatch`. It names which stage failed and never
+any part of the secret, revealing nothing an attacker could not learn by
+trying. Server-side logging on mismatch records the two token *lengths*,
+never the values.
+
+**The single most useful diagnostic, restated because it was already true
+and not obvious:** an unconfigured secret returns **500**, not 401. So a 401
+from this route *always* means `OBSERVER_CRON_SECRET` is set and the token
+did not match — it can never mean the variable is missing. A 500 means the
+opposite.
+
+**Name mismatch is the likeliest production cause, and is not a code bug.**
+The repo consistently uses `OBSERVER_CRON_SECRET` — route, `.env.example`,
+`.env.local`, and this log — and contains **no reference to a bare
+`CRON_SECRET` anywhere**. The report referred to `CRON_SECRET` throughout,
+which suggests that is what was set in the deployment. Left as-is rather
+than renamed: renaming to match a guess would be worse than confirming the
+actual dashboard value.
+
+**Verified against a production build — previously-broken cases now pass,
+rejections still hold:**
+
+| case | before | now |
+|---|---|---|
+| `bearer <secret>` (lowercase) | 401 | **200** |
+| trailing space after secret | 401 | **200** |
+| multiple spaces after `Bearer` | 401 | **200** |
+| `Bearer <secret>` | 200 | **200** |
+| no header | 401 | **401** `missing_authorization_header` |
+| wrong secret | 401 | **401** `secret_mismatch` |
+| `Basic` scheme | 401 | **401** `..._not_a_bearer_token` |
+| raw token, no scheme | 401 | **401** |
+
+`tsc` 0, build exit 0, engine **14/14**, assistant **26/26**.
+
+**Not verifiable from here:** `vercel env ls` requires an interactive OAuth
+device login, so the deployment's actual variable name, value and scope
+could not be inspected. That check remains manual.
+**Confidence:** HIGH on the three fixes and all eight cases above, verified
+with real requests. The production cause itself is UNCONFIRMED — the fixes
+address three plausible causes, and the name mismatch is a fourth that only
+the dashboard can settle.
+**Status:** Accepted.
